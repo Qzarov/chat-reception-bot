@@ -3,6 +3,8 @@ import { TelegramBotUpdateService } from './tg-bot.service';
 import { AppConfigModule, AppConfigService } from '@config/index';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { session } from 'telegraf';
+import { UserModule } from '@modules/user';
+import { RatingModule } from '@modules/rating';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { session } from 'telegraf';
         middlewares: [session()], // Подключаем middleware для использования сессий
       }),
     }),
+    UserModule,
+    RatingModule,
   ],
   providers: [TelegramBotUpdateService],
   exports: [TelegramBotUpdateService],

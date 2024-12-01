@@ -4,6 +4,7 @@ export interface SessionData {
   step?: string; // Текущий шаг в процессе диалога
   name?: string;
   surname?: string;
+  about?: string;
   bio?: string;
   goal?: string;
 }

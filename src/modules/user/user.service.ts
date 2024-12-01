@@ -15,8 +15,9 @@ export class UserService {
     return this.userRepository.save(newUser);
   }
 
-  async findUserById(id: number): Promise<UserEntity> {
-    return this.userRepository.findOneBy({ id });
+  async findUserById(tgId: string | number): Promise<UserEntity> {
+    const telegramId = String(tgId);
+    return this.userRepository.findOneBy({ telegramId });
   }
 
   async findAllUsers(): Promise<UserEntity[]> {

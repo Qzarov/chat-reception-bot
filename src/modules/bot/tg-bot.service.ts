@@ -2,31 +2,46 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Ctx, Start, Update, On } from 'nestjs-telegraf';
 
-import { Markup } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import { RegisteringUserContext } from './types';
 import { AppConfigService } from '@modules/config';
+import { UserEntity, UserService } from '@modules/user';
 
 @Update()
 @Injectable()
 export class TelegramBotUpdateService {
   private readonly _logger = new Logger(TelegramBotUpdateService.name);
 
-  constructor(@Inject() private readonly _config: AppConfigService) {}
+  constructor(
+    @Inject() private readonly _config: AppConfigService,
+    private readonly _userService: UserService,
+  ) {}
 
   @Start()
   async _handleStart(@Ctx() ctx: RegisteringUserContext) {
+    const dbUser = await this._userService.findUserById(ctx.from.id);
+    if (
+      await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
+    ) {
+      return;
+    }
+
     await ctx.reply(
       'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, ответь, пожалуйста, на несколько коротких вопросов.',
-      Markup.keyboard([['Приступим!']]) // Создаем клавиатуру с одной кнопкой
-        .resize() // Убираем лишние пустые строки
-        .oneTime(), // Клавиатура исчезнет после нажатия кнопки
+      Markup.keyboard([['Приступим!']])
+        .resize()
+        .oneTime(),
     );
     ctx.session = { step: 'start-approve' };
   }
 
   @On('text')
   async handleText(@Ctx() ctx: RegisteringUserContext) {
-    this._logger.log(`Get ctx`);
+    if (
+      await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
+    ) {
+      return;
+    }
 
     if ('text' in ctx.message) {
       const text = ctx.message.text;
@@ -45,20 +60,33 @@ export class TelegramBotUpdateService {
 
         case 'surname':
           ctx.session.surname = text;
-          await ctx.reply('Расскажи о себе:');
-          ctx.session.step = 'bio';
-          break;
-
-        case 'bio':
-          ctx.session.bio = text;
-          await ctx.reply('Какова цель вступления в чат?');
-          ctx.session.step = 'goal';
-          break;
-
-        case 'goal':
-          ctx.session.goal = text;
           await ctx.reply(
-            `Спасибо! Вот твоя ссылка для вступления в чат: ${await this._generateInviteLink(ctx, this._config.groupId)}. Воспользоваться ей можно только один раз`,
+            'Представься для участников сообщества, расскажи немного о себе:',
+          );
+          ctx.session.step = 'about';
+          break;
+
+        case 'about':
+          ctx.session.about = text;
+          await ctx.reply('Расскажи о сфере твоих интересов:');
+          ctx.session.step = 'areaOfInterest';
+          break;
+
+        case 'areaOfInterest':
+          ctx.session.goal = text;
+          /** Add user */
+          const tgUser = ctx.from;
+          const user: UserEntity = {
+            telegramId: String(tgUser.id),
+            firstName: tgUser.first_name,
+            lastName: tgUser.last_name,
+            username: tgUser.username,
+            about: ctx.session.about,
+          };
+          await this._addUser(user);
+          /** Reply  */
+          await ctx.reply(
+            `Спасибо! Вот твоя ссылка для вступления в чат: ${await this._generateInviteLink(ctx, this._config.groupId)}. Воспользоваться ей можно только один раз в течение 30 минут.`,
           );
           ctx.session.step = 'link-generated';
           break;
@@ -90,5 +118,40 @@ export class TelegramBotUpdateService {
       this._logger.error(error.message);
       await ctx.reply('Не удалось создать ссылку. Попробуйте позже.');
     }
+  }
+
+  private async _addUser(user: UserEntity): Promise<void> {
+    try {
+      await this._userService.createUser(user);
+      console.log(`User @${user.username} added successfully!`);
+    } catch (error) {
+      console.error(`Failed to add user @${user.username}:`, error.message);
+    }
+  }
+
+  private async _isUserChatMember(
+    ctx: Context,
+    chatId: string,
+  ): Promise<boolean> {
+    const chatMember = await ctx.telegram.getChatMember(chatId, ctx.from.id);
+    return (
+      chatMember.status === 'member' ||
+      chatMember.status === 'administrator' ||
+      chatMember.status === 'creator'
+    );
+  }
+
+  private async _checkAndHandleIfChatMember(
+    ctx: Context,
+    chatId: string,
+  ): Promise<boolean> {
+    const isChatMember = await this._isUserChatMember(ctx, chatId);
+    if (isChatMember) {
+      await ctx.reply(
+        'Привет! Я нашел тебя, ты уже состоишь в чате выпускников ИТМО!',
+        Markup.keyboard([[]]),
+      );
+    }
+    return isChatMember;
   }
 }

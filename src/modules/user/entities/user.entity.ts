@@ -3,39 +3,42 @@ import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 
 @Entity('users')
 export class UserEntity {
-  @PrimaryGeneratedColumn()
-  id: number;
-
-  @Column({ type: 'int', nullable: true })
-  telegramId: number;
+  @PrimaryGeneratedColumn({})
+  id?: number;
 
   @Column({ type: 'text', nullable: true })
-  firstName: string;
+  telegramId?: string;
 
   @Column({ type: 'text', nullable: true })
-  lastName: string;
+  firstName?: string;
 
   @Column({ type: 'text', nullable: true })
-  username: string;
+  lastName?: string;
 
   @Column({ type: 'text', nullable: true })
-  workCompany: string;
+  username?: string;
 
   @Column({ type: 'text', nullable: true })
-  workPosition: string;
+  workCompany?: string;
 
   @Column({ type: 'text', nullable: true })
-  areaOfInterest: string;
+  workPosition?: string;
 
   @Column({ type: 'text', nullable: true })
-  couldHelpWith: string;
+  areaOfInterest?: string;
 
   @Column({ type: 'text', nullable: true })
-  request: string;
+  about?: string;
 
   @Column({ type: 'text', nullable: true })
-  communityRole: string;
+  couldHelpWith?: string;
+
+  @Column({ type: 'text', nullable: true })
+  request?: string;
+
+  @Column({ type: 'text', nullable: true })
+  communityRole?: string;
 
   @OneToMany(() => RatingEntity, (rating) => rating.user)
-  ratings: RatingEntity[];
+  ratings?: RatingEntity[];
 }
