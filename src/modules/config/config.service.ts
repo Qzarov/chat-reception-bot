@@ -8,27 +8,56 @@ import { ConfigService } from '@nestjs/config';
  */
 @Injectable()
 export class AppConfigService {
-  constructor(private configService: ConfigService) {}
+  constructor(private _configService: ConfigService) {}
 
-  get env(): string {
-    return this.configService.get<string>('config.env') ?? '';
+  get appEnv(): string {
+    return this._configService.get<string>('config.appEnv') ?? '';
   }
   get dbHost(): string {
-    return this.configService.get<string>('config.dbHost') ?? '';
+    console.log(
+      'config.dbHost:',
+      this._configService.get<string>('config.dbHost'),
+    );
+    return this._configService.get<string>('config.dbHost') ?? '';
   }
   get dbPort(): number {
-    const port = this.configService.get<number>('config.dbPort');
+    console.log(
+      'config.dbPort:',
+      this._configService.get<string>('config.dbPort'),
+    );
+    const port = this._configService.get<number>('config.dbPort');
     return Number(port);
   }
+  get dbUser(): string {
+    console.log(
+      'config.dbUser:',
+      this._configService.get<string>('config.dbUser'),
+    );
+    return this._configService.get<string>('config.dbUser') ?? '';
+  }
+  get dbPass(): string {
+    console.log(
+      'config.dbPass:',
+      this._configService.get<string>('config.dbPass'),
+    );
+    return this._configService.get<string>('config.dbPass') ?? '';
+  }
+  get dbName(): string {
+    console.log(
+      'config.dbName:',
+      this._configService.get<string>('config.dbName'),
+    );
+    return this._configService.get<string>('config.dbName') ?? '';
+  }
   get botToken(): string {
-    return this.configService.get<string>('config.botToken') ?? '';
+    return this._configService.get<string>('config.botToken') ?? '';
   }
   get port(): number {
-    const port = this.configService.get<number>('config.appPort');
+    const port = this._configService.get<number>('config.appPort');
     return Number(port);
   }
   get groupId(): number {
-    const groupId = this.configService.get<number>('config.groupId') ?? '';
+    const groupId = this._configService.get<number>('config.groupId') ?? '';
     return Number(groupId);
   }
 }

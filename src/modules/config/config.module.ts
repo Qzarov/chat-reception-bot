@@ -31,6 +31,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           .required()
           .disallow(0)
           .error(new Error('DB port is required')),
+        DB_USER: Joi.string()
+          .required()
+          .disallow('')
+          .error(new Error('DB user is required')),
+        DB_PASS: Joi.string()
+          .required()
+          .disallow('')
+          .error(new Error('DB pass is required')),
+        DB_NAME: Joi.string()
+          .required()
+          .disallow('')
+          .error(new Error('DB name is required')),
         BOT_TOKEN: Joi.string()
           .required()
           .disallow('')
