@@ -36,7 +36,9 @@ export class TelegramBotUpdateService {
 
   @On('text')
   async handleText(@Ctx() ctx: RegisteringUserContext) {
-    if (this._isMessageFromTargetChat(ctx, String(this._config.groupId))) {
+    if (
+      await this._isMessageFromTargetChat(ctx, String(this._config.groupId))
+    ) {
       console.log(`Message from target chat`);
       return;
     }
