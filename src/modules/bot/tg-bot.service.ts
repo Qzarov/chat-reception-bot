@@ -21,7 +21,6 @@ export class TelegramBotUpdateService {
   @Start()
   async handleStart(@Ctx() ctx: RegisteringUserContext) {
     this._logger.log('handleStart');
-    const dbUser = await this._userService.findUserById(ctx.from.id);
     if (
       await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
     ) {
@@ -112,6 +111,13 @@ export class TelegramBotUpdateService {
   @On('text')
   async handleText(@Ctx() ctx: RegisteringUserContext) {
     this._logger.log('handleText');
+    if (
+      await this._isMessageFromTargetChat(ctx, String(this._config.groupId))
+    ) {
+      console.log(`Message from target chat`);
+      return;
+    }
+
     if (
       await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
     ) {
@@ -249,5 +255,9 @@ export class TelegramBotUpdateService {
       );
     }
     return isChatMember;
+  }
+
+  private async _isMessageFromTargetChat(ctx: Context, chatId: string) {
+    return String(ctx.chat.id) === chatId;
   }
 }
