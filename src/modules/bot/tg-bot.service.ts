@@ -70,39 +70,8 @@ export class TelegramBotUpdateService {
 
     // check if user not in db -> send reply user should apply for participance
     const username = splittedMsgText[1];
-    const users = await this._userService.findUsers({ username });
 
-    if (users.length === 0) {
-      await ctx.reply(`Пользователь не найден. Возможно он не заполнил анкету через бота либо необходимо проверить правильность написания его юзернейма`); 
-      return;
-    }
-
-    if (users.length > 1) {
-      await ctx.reply(`Найдено несколько пользователей. Такого не должно быть, обратитесь к администратору БД`); 
-      return;
-    }
-
-    const user = users[0]
-    if (user.isVerified) {
-      await ctx.reply(`Пользователь @${username} уже верифицирован`);  
-      return
-    }
-
-    // send reply "user verified. Invite link:".
-    const inviteLink = await this._generateInviteLink(ctx, this._config.groupId)
-    if (typeof inviteLink === 'undefined') {
-      await ctx.reply(`Проблема при генерации ссылки. Проверьте, что бот обладает достаточными правами для приглашения пользователей по ссылке`)
-      return;
-    }
-
-    // verify user
-    await this._verifyUser(user);
-
-    // reply in chat
-    await ctx.reply(`Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`);
-    
-    // send invite link to user
-    await this.bot.telegram.sendMessage(user.telegramId, `Ваше обучение в ИТМО было подтверждено. Одноразовая ссылка для вступления в группу: ${inviteLink}`);
+    await this._verifyUser(ctx, username);
   }
 
   @Command('createLink')
@@ -112,16 +81,15 @@ export class TelegramBotUpdateService {
   async handleText(@Ctx() ctx: RegisteringUserContext) {
     this._logger.log('handleText');
     if (
-      await this._isMessageFromTargetChat(ctx, String(this._config.groupId))
+      await this._isMessageFromTargetChat(ctx, String(this._config.groupId)) ||
+      await this._isMessageFromTargetChat(ctx, String(this._config.adminsGroupId))
     ) {
       console.log(`Message from target chat`);
       return;
     }
 
-    if (
-      await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
-    ) {
-      return;
+    if (await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))) { 
+      return; 
     }
 
     if ('text' in ctx.message) {
@@ -166,29 +134,63 @@ export class TelegramBotUpdateService {
             isVerified: false,
           };
           await this._addUser(user);
+
+          console.log('user:', user)
+
+          // send message to admins group
+          const keyboard = Markup.inlineKeyboard([
+            Markup.button.callback('✅ да ✅', `userIsAlumni:${tgUser.username}`),
+            Markup.button.callback('❌ нет ❌', `userNotAlumni:${tgUser.username}`)
+          ])
+
+          await this.bot.telegram.sendMessage(
+            this._config.adminsGroupId, 
+            `Пользователь @${tgUser.username} прислал анкету:\n ${this._generateUserInfoMsg(user)}. Верифицировать участника?`,
+            { reply_markup: keyboard.reply_markup }
+          );
+
           /** Reply  */
           await ctx.reply(
             `Спасибо! Ваш запрос на вступление в клуб выпускников ИТМО отправлен администраторам. Как только они подтвердят, что вы учились в ИТМО, я пришлю ссылку на вступления в группу.`,
           );
 
-          // await ctx.reply(
-          //   `Спасибо! Вот твоя ссылка для вступления в чат: ${await this._generateInviteLink(ctx, this._config.groupId)}. Воспользоваться ей можно только один раз в течение 30 минут.`,
-          // );
-          ctx.session.step = 'verification';
-          
-          // ctx.session.step = 'link-generated';
-          break;
 
-        case 'verified':
-          await ctx.reply(
-            `Твоя ссылка для вступления в чат: ${await this._generateInviteLink(ctx, this._config.groupId)}. Воспользоваться ей можно только один раз`,
-          );
+
+          ctx.session.step = 'verification';
           break;
 
         default:
           await ctx.reply('Человек, я тебя не понимаю 🥲');
       }
     }
+  }
+
+  @On('callback_query')
+  async handleCallbackQuery(@Ctx() ctx) {
+    this._logger.log('handleCallbackQuery');
+    
+
+    const data = ctx.callbackQuery?.data;
+    this._logger.log(`callback data: ${data}`);
+    if (!data) return;
+
+    const splittedData = data.split(':');
+
+    /**
+     * Back to main menu
+     */
+    if (data.startsWith('userIsAlumni')) {
+      if (splittedData.length !== 2) {
+        this._logger.error(
+          `Invalid callback data: ${data}`,
+        );
+        return;
+      }
+      const username = splittedData[1];
+      await this._verifyUser(ctx, username);
+      return;
+    }
+
   }
 
   private async _generateInviteLink(
@@ -210,7 +212,7 @@ export class TelegramBotUpdateService {
     }
   }
 
-  private async _verifyUser(user: UserEntity) {
+  private async _setUserVerified(user: UserEntity) {
     user.isVerified = true
     await this._userService.updateUser(user)
   }
@@ -259,5 +261,45 @@ export class TelegramBotUpdateService {
 
   private async _isMessageFromTargetChat(ctx: Context, chatId: string) {
     return String(ctx.chat.id) === chatId;
+  }
+
+  private _generateUserInfoMsg(user: UserEntity): string {
+    return `Имя: ${user.firstName}, Фамилия: ${user.lastName}, Компания: ${user.workCompany}`
+  }
+
+  private async _verifyUser(@Ctx() ctx, username: string) {
+    const users = await this._userService.findUsers({ username });
+
+    if (users.length === 0) {
+      await ctx.reply(`Пользователь не найден. Возможно он не заполнил анкету через бота либо необходимо проверить правильность написания его юзернейма`); 
+      return;
+    }
+
+    if (users.length > 1) {
+      await ctx.reply(`Найдено несколько пользователей. Такого не должно быть, обратитесь к администратору БД`); 
+      return;
+    }
+
+    const user = users[0]
+    if (user.isVerified) {
+      await ctx.reply(`Пользователь @${username} уже верифицирован`);  
+      return
+    }
+
+    // send reply "user verified. Invite link:".
+    const inviteLink = await this._generateInviteLink(ctx, this._config.groupId)
+    if (typeof inviteLink === 'undefined') {
+      await ctx.reply(`Проблема при генерации ссылки. Проверьте, что бот обладает достаточными правами для приглашения пользователей по ссылке`)
+      return;
+    }
+
+    // verify user
+    await this._setUserVerified(user);
+
+    // reply in chat
+    await ctx.reply(`Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`);
+    
+    // send invite link to user
+    await this.bot.telegram.sendMessage(user.telegramId, `Ваше обучение в ИТМО было подтверждено. Одноразовая ссылка для вступления в группу: ${inviteLink}`);
   }
 }
