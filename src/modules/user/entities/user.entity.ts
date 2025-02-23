@@ -39,6 +39,9 @@ export class UserEntity {
   @Column({ type: 'text', nullable: true })
   communityRole?: string;
 
+  @Column({ type: 'bool', nullable: true, default: false })
+  isVerified?: boolean;
+
   @OneToMany(() => RatingEntity, (rating) => rating.user)
   ratings?: RatingEntity[];
 }

@@ -48,4 +48,9 @@ export class AppConfigService {
     const groupId = this._configService.get<number>('config.groupId') ?? '';
     return Number(groupId);
   }
+
+  get adminsGroupId(): number {
+    const adminsGroupId = this._configService.get<number>('config.adminsGroupId') ?? '';
+    return Number(adminsGroupId);
+  }
 }

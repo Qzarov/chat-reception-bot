@@ -20,8 +20,16 @@ export class UserService {
     return this.userRepository.findOneBy({ telegramId });
   }
 
+  async findUsers(where: Partial<UserEntity>): Promise<UserEntity[]> {
+    return this.userRepository.find({ where });
+  }
+
   async findAllUsers(): Promise<UserEntity[]> {
     return this.userRepository.find();
+  }
+
+  async updateUser(userData: Partial<UserEntity>): Promise<UserEntity> {
+    return this.userRepository.save(userData);
   }
 
   async deleteUser(id: number): Promise<void> {

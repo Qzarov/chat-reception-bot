@@ -10,4 +10,5 @@ export default registerAs('config', () => ({
   dbName: process.env.DB_NAME,
   botToken: process.env.BOT_TOKEN,
   groupId: process.env.GROUP_ID,
+  adminsGroupId: process.env.ADMINS_GROUP_ID,
 }));

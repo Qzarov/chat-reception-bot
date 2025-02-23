@@ -51,6 +51,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           .required()
           .disallow(0)
           .error(new Error('GROUP_ID is invalid or undefined')),
+        ADMINS_GROUP_ID: Joi.number()
+          .required()
+          .disallow(0)
+          .error(new Error('ADMINS_GROUP_ID is invalid or undefined')),
       }),
     }),
   ],
