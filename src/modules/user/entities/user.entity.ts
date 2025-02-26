@@ -16,31 +16,46 @@ export class UserEntity {
   lastName?: string;
 
   @Column({ type: 'text', nullable: true })
+  fatherName?: string;
+
+  @Column({ type: 'text', nullable: true })
   username?: string;
+
+  @Column({ type: 'text', nullable: true })
+  email?: string;
+  
+  @Column({ type: 'int', nullable: true })
+  uniFinishedYear?: number;
+
+  @Column({ type: 'text', nullable: true })
+  faculty?: string;
 
   @Column({ type: 'text', nullable: true })
   workCompany?: string;
 
   @Column({ type: 'text', nullable: true })
+  professionalСompetencies?: string;
+
+  @Column({ type: 'text', nullable: true })
   workPosition?: string;
 
   @Column({ type: 'text', nullable: true })
-  areaOfInterest?: string;
-
-  @Column({ type: 'text', nullable: true })
-  about?: string;
-
-  @Column({ type: 'text', nullable: true })
-  couldHelpWith?: string;
-
-  @Column({ type: 'text', nullable: true })
-  request?: string;
-
-  @Column({ type: 'text', nullable: true })
-  communityRole?: string;
+  clubActivities?: string;
 
   @Column({ type: 'bool', nullable: true, default: false })
-  isVerified?: boolean;
+  readyToHelpClub?: boolean;
+
+  @Column({ type: 'bool', nullable: true, default: false })
+  addCompanyToCatalogue?: boolean;
+
+  @Column({ type: 'bool', nullable: true, default: false })
+  openCatalogueData?: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  valueFromClub?: string;
+
+  @Column({ type: 'int', nullable: true, default: 0 })
+  isVerified?: number;
 
   @OneToMany(() => RatingEntity, (rating) => rating.user)
   ratings?: RatingEntity[];

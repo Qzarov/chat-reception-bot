@@ -11,11 +11,19 @@ export class UserService {
   ) {}
 
   async createUser(user: UserEntity): Promise<UserEntity> {
-    const newUser = this.userRepository.create({ ...user });
-    return this.userRepository.save(newUser);
+    const oldUser = await this.findUserByTgId(user.telegramId)
+    if (typeof oldUser?.username === 'undefined') {
+      const newUser = this.userRepository.create({ ...user });
+      console.log(`User @${user.username} added successfully!`);
+      return this.userRepository.save(newUser);
+    } else {
+      console.log(`User @${user.username} already exists!`);
+      return oldUser;
+    }
+
   }
 
-  async findUserById(tgId: string | number): Promise<UserEntity> {
+  async findUserByTgId(tgId: string | number): Promise<UserEntity> {
     const telegramId = String(tgId);
     return this.userRepository.findOneBy({ telegramId });
   }

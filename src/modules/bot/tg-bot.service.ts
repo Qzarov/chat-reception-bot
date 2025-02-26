@@ -71,7 +71,7 @@ export class TelegramBotUpdateService {
     // check if user not in db -> send reply user should apply for participance
     const username = splittedMsgText[1];
 
-    await this._verifyUser(ctx, username);
+    await this._verifyUser(ctx, username, true);
   }
 
   @Command('createLink')
@@ -97,55 +97,126 @@ export class TelegramBotUpdateService {
 
       switch (ctx.session.step) {
         case 'start-approve':
-          await ctx.reply('Твое имя?');
+          await ctx.reply('Твое имя:');
           ctx.session.step = 'name';
           break;
 
         case 'name':
           ctx.session.name = text;
-          await ctx.reply('Какая у тебя фамилия?');
+          await ctx.reply('Твоя фамилия:');
           ctx.session.step = 'surname';
           break;
 
         case 'surname':
           ctx.session.surname = text;
           await ctx.reply(
-            'Представься для участников сообщества, расскажи немного о себе:',
+            'Твое отчество:',
           );
-          ctx.session.step = 'about';
+          ctx.session.step = 'fatherName';
           break;
 
-        case 'about':
-          ctx.session.about = text;
-          await ctx.reply('Расскажи о сфере твоих интересов:');
-          ctx.session.step = 'areaOfInterest';
+        case 'fatherName':
+          ctx.session.fatherName = text;
+          await ctx.reply(
+            'Твоя электронная почта:',
+          );
+          ctx.session.step = 'email';
           break;
 
-        case 'areaOfInterest':
-          ctx.session.goal = text;
+        case 'email':
+          ctx.session.email = text;
+          await ctx.reply('Год окончания университета (только число):');
+          ctx.session.step = 'uniFinishedYear';
+          break;
+
+        case 'uniFinishedYear':
+          ctx.session.uniFinishedYear = Number(text);
+          await ctx.reply('Твой факультет (аббревиатура):');
+          ctx.session.step = 'faculty';
+          break;
+
+        case 'faculty':
+          ctx.session.faculty = text;
+          await ctx.reply('Компания, в которой ты работаешь:');
+          ctx.session.step = 'workCompany';
+          break;
+
+        case 'workCompany':
+          ctx.session.workCompany = text;
+          await ctx.reply('Позиция, которую ты занимаешь:');
+          ctx.session.step = 'workPosition';
+          break;
+
+        case 'workPosition':
+          ctx.session.workPosition = text;
+          await ctx.reply('Твои профессиональные компетенции:');
+          ctx.session.step = 'professionalСompetencies';
+          break;
+
+        case 'professionalСompetencies':
+          ctx.session.professionalСompetencies = text;
+          await ctx.reply('Компетенции и роли, которые готов(-а) исполнять в клубе:');
+          ctx.session.step = 'clubActivities';
+          break;
+
+        case 'clubActivities':
+          ctx.session.clubActivities = text;
+          await ctx.reply('Готов(-а) уделять часть времени деятельности клуба? (да / нет)');
+          ctx.session.step = 'readyToHelpClub';
+          break;
+
+        case 'readyToHelpClub':
+          ctx.session.readyToHelpClub = text.toLowerCase() === 'да' ? true : false;
+          await ctx.reply('Внести компанию/свои компетенции в реестр? (да / нет)\n\nРеестр - список услуг/компетенций выпускников, которыми они готовы поделиться с университетом или другими выпускниками (в качестве подрядчика/сотрудника/партнера)');
+          ctx.session.step = 'addCompanyToCatalogue';
+          break;
+
+        case 'addCompanyToCatalogue':
+          ctx.session.addCompanyToCatalogue = text.toLowerCase() === 'да' ? true : false;
+          await ctx.reply('Открыть данные, внесенные в реестр, для участников клуба? (да / нет)');
+          ctx.session.step = 'openCatalogueData';
+          break;
+
+        case 'openCatalogueData':
+          ctx.session.openCatalogueData = text.toLowerCase() === 'да' ? true : false;
+          await ctx.reply('Опиши ценность, которую ожидаешь от клуба:');
+          ctx.session.step = 'valueFromClub';
+          break;
+
+        case 'valueFromClub':
+          ctx.session.valueFromClub = text;
           /** Add user */
           const tgUser = ctx.from;
           const user: UserEntity = {
             telegramId: String(tgUser.id),
-            firstName: tgUser.first_name,
-            lastName: tgUser.last_name,
+            firstName: ctx.session.name,
+            lastName: ctx.session.surname,
             username: tgUser.username,
-            about: ctx.session.about,
-            isVerified: false,
+            fatherName: ctx.session.fatherName,
+            email: ctx.session.email,
+            uniFinishedYear: ctx.session.uniFinishedYear,
+            faculty: ctx.session.faculty,
+            workCompany: ctx.session.workCompany,
+            workPosition: ctx.session.workPosition,
+            professionalСompetencies: ctx.session.professionalСompetencies,
+            clubActivities: ctx.session.clubActivities,
+            readyToHelpClub: ctx.session.readyToHelpClub,
+            addCompanyToCatalogue: ctx.session.addCompanyToCatalogue,
+            openCatalogueData: ctx.session.openCatalogueData,
+            valueFromClub: ctx.session.valueFromClub,
+            isVerified: 0,
           };
           await this._addUser(user);
 
-          console.log('user:', user)
-
           // send message to admins group
           const keyboard = Markup.inlineKeyboard([
-            Markup.button.callback('✅ да ✅', `userIsAlumni:${tgUser.username}`),
-            Markup.button.callback('❌ нет ❌', `userNotAlumni:${tgUser.username}`)
+            Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
+            Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.username}`)
           ])
 
           await this.bot.telegram.sendMessage(
             this._config.adminsGroupId, 
-            `Пользователь @${tgUser.username} прислал анкету:\n ${this._generateUserInfoMsg(user)}. Верифицировать участника?`,
+            `Пользователь @${tgUser.username} прислал анкету:\n ${this._generateUserInfoMsg(user)}. \n\nВерифицировать участника?`,
             { reply_markup: keyboard.reply_markup }
           );
 
@@ -177,7 +248,7 @@ export class TelegramBotUpdateService {
     const splittedData = data.split(':');
 
     /**
-     * Back to main menu
+     * User verified
      */
     if (data.startsWith('userIsAlumni')) {
       if (splittedData.length !== 2) {
@@ -187,10 +258,26 @@ export class TelegramBotUpdateService {
         return;
       }
       const username = splittedData[1];
-      await this._verifyUser(ctx, username);
+      await this._verifyUser(ctx, username, true);
       return;
     }
 
+    /**
+     * User not verified
+     */
+    if (data.startsWith('userNotAlumni')) {
+      if (splittedData.length !== 2) {
+        this._logger.error(
+          `Invalid callback data: ${data}`,
+        );
+        return;
+      }
+      const username = splittedData[1];
+      
+      console.log(`Not verify user ${username}`)
+      await this._verifyUser(ctx, username, false);
+      return;
+    }
   }
 
   private async _generateInviteLink(
@@ -212,15 +299,14 @@ export class TelegramBotUpdateService {
     }
   }
 
-  private async _setUserVerified(user: UserEntity) {
-    user.isVerified = true
+  private async _setUserVerified(user: UserEntity, isVerified: boolean) {
+    user.isVerified = isVerified ? 1 : -1
     await this._userService.updateUser(user)
   }
 
   private async _addUser(user: UserEntity): Promise<void> {
     try {
       await this._userService.createUser(user);
-      console.log(`User @${user.username} added successfully!`);
     } catch (error) {
       console.error(`Failed to add user @${user.username}:`, error.message);
     }
@@ -264,10 +350,14 @@ export class TelegramBotUpdateService {
   }
 
   private _generateUserInfoMsg(user: UserEntity): string {
-    return `Имя: ${user.firstName}, Фамилия: ${user.lastName}, Компания: ${user.workCompany}`
+    return `` + 
+      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` +
+      `email: ${user.email}\nОкончил факультет ${user.faculty} в ${user.uniFinishedYear} году\n` +
+      `Готов принимать участие в деят-ти клуба: ${user.readyToHelpClub}${user.readyToHelpClub ? `Роль и компетенции: ` + user.clubActivities : ''}\n` +
+      `Ценность от клуба: ${user.valueFromClub}`
   }
 
-  private async _verifyUser(@Ctx() ctx, username: string) {
+  private async _verifyUser(@Ctx() ctx, username: string, isVerified: boolean) {
     const users = await this._userService.findUsers({ username });
 
     if (users.length === 0) {
@@ -281,25 +371,33 @@ export class TelegramBotUpdateService {
     }
 
     const user = users[0]
-    if (user.isVerified) {
-      await ctx.reply(`Пользователь @${username} уже верифицирован`);  
+    if (user.isVerified === 1 || user.isVerified === -1) {
+      await ctx.reply(`Верификация пользователя @${username} уже была проведена. Результат: ${user.isVerified === 1 ? 'одобрено' : 'отклонено'}`);  
       return
     }
 
-    // send reply "user verified. Invite link:".
-    const inviteLink = await this._generateInviteLink(ctx, this._config.groupId)
-    if (typeof inviteLink === 'undefined') {
-      await ctx.reply(`Проблема при генерации ссылки. Проверьте, что бот обладает достаточными правами для приглашения пользователей по ссылке`)
-      return;
+    if (isVerified) {
+      // send reply "user verified. Invite link:".
+      const inviteLink = await this._generateInviteLink(ctx, this._config.groupId)
+      if (typeof inviteLink === 'undefined') {
+        await ctx.reply(`Проблема при генерации ссылки. Проверьте, что бот обладает достаточными правами для приглашения пользователей по ссылке`)
+        return;
+      }
+
+      // reply in chat
+      await ctx.reply(`Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`);
+      
+      // send invite link to user
+      await this.bot.telegram.sendMessage(user.telegramId, `Ваше обучение в ИТМО было подтверждено. Одноразовая ссылка для вступления в группу: ${inviteLink}`);
+    } else {
+      // reply in chat
+      await ctx.reply(`Запрос пользователя @${username} отклонен, пользователь получил уведомление в личные сообщения`);
+
+      // send invite link to user
+      await this.bot.telegram.sendMessage(user.telegramId, `Ваше обучение в ИТМО не подтверждено`);
     }
 
     // verify user
-    await this._setUserVerified(user);
-
-    // reply in chat
-    await ctx.reply(`Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`);
-    
-    // send invite link to user
-    await this.bot.telegram.sendMessage(user.telegramId, `Ваше обучение в ИТМО было подтверждено. Одноразовая ссылка для вступления в группу: ${inviteLink}`);
+    await this._setUserVerified(user, isVerified);
   }
 }
