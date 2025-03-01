@@ -23,7 +23,7 @@ export class UserEntity {
 
   @Column({ type: 'text', nullable: true })
   email?: string;
-  
+
   @Column({ type: 'int', nullable: true })
   uniFinishedYear?: number;
 

@@ -50,7 +50,8 @@ export class AppConfigService {
   }
 
   get adminsGroupId(): number {
-    const adminsGroupId = this._configService.get<number>('config.adminsGroupId') ?? '';
+    const adminsGroupId =
+      this._configService.get<number>('config.adminsGroupId') ?? '';
     return Number(adminsGroupId);
   }
 }

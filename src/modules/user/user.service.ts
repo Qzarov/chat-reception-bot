@@ -11,7 +11,7 @@ export class UserService {
   ) {}
 
   async createUser(user: UserEntity): Promise<UserEntity> {
-    const oldUser = await this.findUserByTgId(user.telegramId)
+    const oldUser = await this.findUserByTgId(user.telegramId);
     if (typeof oldUser?.username === 'undefined') {
       const newUser = this.userRepository.create({ ...user });
       console.log(`User @${user.username} added successfully!`);
@@ -20,7 +20,6 @@ export class UserService {
       console.log(`User @${user.username} already exists!`);
       return oldUser;
     }
-
   }
 
   async findUserByTgId(tgId: string | number): Promise<UserEntity> {
