@@ -12,7 +12,7 @@ export class UserService {
 
   async createUser(user: UserEntity): Promise<UserEntity> {
     const oldUser = await this.findUserByTgId(user.telegramId);
-    if (typeof oldUser?.username === 'undefined') {
+    if (oldUser === null) {
       const newUser = this.userRepository.create({ ...user });
       console.log(`User @${user.username} added successfully!`);
       return this.userRepository.save(newUser);
@@ -22,9 +22,9 @@ export class UserService {
     }
   }
 
-  async findUserByTgId(tgId: string | number): Promise<UserEntity> {
+  async findUserByTgId(tgId: string | number): Promise<UserEntity | null> {
     const telegramId = String(tgId);
-    return this.userRepository.findOneBy({ telegramId });
+    return await this.userRepository.findOneBy({ telegramId });
   }
 
   async findUsers(where: Partial<UserEntity>): Promise<UserEntity[]> {

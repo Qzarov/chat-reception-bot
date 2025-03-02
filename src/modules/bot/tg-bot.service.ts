@@ -3,7 +3,13 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Ctx, Start, Update, On, Command, InjectBot } from 'nestjs-telegraf';
 
 import { Context, Markup, Telegraf } from 'telegraf';
-import { RegisteringUserContext } from './types';
+import {
+  ctxNextStep,
+  ctxPreviousStep,
+  ctxStepReply,
+  ctxSteps,
+  RegisteringUserContext,
+} from './types';
 import { AppConfigService } from '@modules/config';
 import { UserEntity, UserService } from '@modules/user';
 
@@ -21,19 +27,31 @@ export class TelegramBotUpdateService {
   @Start()
   async handleStart(@Ctx() ctx: RegisteringUserContext) {
     this._logger.log('handleStart');
-    if (
-      await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
-    ) {
+
+    const userTgId = ctx.from.id;
+    const isChatMember = await this._checkIfChatMember(
+      ctx,
+      String(this._config.groupId),
+    );
+    const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
+
+    if (isInDb && isChatMember) {
+      await ctx.reply('Привет! Вы уже заполняли анкету и состоите в чате.');
       return;
     }
 
-    await ctx.reply(
-      'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, ответь, пожалуйста, на несколько коротких вопросов.',
-      Markup.keyboard([['Приступим!']])
-        .resize()
-        .oneTime(),
-    );
-    ctx.session = { step: 'start-approve' };
+    if (!isInDb) {
+      await ctx.reply(
+        'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, необходимо заполнить форму.',
+        Markup.keyboard([['Приступим!']])
+          .resize()
+          .oneTime(),
+      );
+      ctx.session = { step: ctxSteps.startApprove };
+      return;
+    }
+
+    await ctx.reply('Привет! Не знаю, что и сказать...');
   }
 
   @Command('id')
@@ -43,6 +61,57 @@ export class TelegramBotUpdateService {
       `Id чата: \`${ctx.chat.id}\`\nId пользователя: \`${ctx.from.id}\``,
       { parse_mode: 'MarkdownV2' },
     );
+    return;
+  }
+
+  @Command('checkUser')
+  async handleCheckUser(@Ctx() ctx: RegisteringUserContext) {
+    this._logger.log('handleCheckUser');
+
+    const data = ctx.text;
+    this._logger.log(`callback data: ${data}`);
+
+    const splittedData = data.split(' ');
+    if (splittedData.length !== 2) {
+      await ctx.reply(
+        `Некорректный формат команды. Отправьте команду в формате /checkUser 'userTgId' или /checkUser 'username'`,
+      );
+      return;
+    }
+
+    const userIdentifier: string = splittedData[1];
+    if (isNaN(Number(userIdentifier))) {
+      const users = await this._userService.findUsers({
+        username: userIdentifier,
+      });
+      if (users.length !== 1) {
+        await ctx.reply(
+          `По юзернейму @${userIdentifier} найдено ${users.length} пользователей`,
+        );
+      } else {
+        const user = users[0];
+        const msg = `Пользователь @${user.username} (id \`${user.telegramId}\`) найден:\n\n${this._generateUserInfoMsg(user)}`;
+        await ctx.reply(this._preprocessMessage(msg), {
+          parse_mode: 'MarkdownV2',
+        });
+      }
+    } else {
+      const user = await this._userService.findUserByTgId(userIdentifier);
+      if (user !== null) {
+        const msg = this._generateUserInfoMsg(user);
+        await ctx.reply(
+          `Пользователь @${user.username} \(id \`${user.telegramId}\`) найден:\n\n${'ee'}`,
+          { parse_mode: 'MarkdownV2' },
+        );
+      } else {
+        await ctx.reply(`Пользователь id ${userIdentifier} не найден`);
+      }
+    }
+
+    // await ctx.reply(
+    //   `Пользователь: с \`${ctx.from.id}\``,
+    //   { parse_mode: 'MarkdownV2' },
+    // );
     return;
   }
 
@@ -82,23 +151,23 @@ export class TelegramBotUpdateService {
   @On('text')
   async handleText(@Ctx() ctx: RegisteringUserContext) {
     this._logger.log('handleText');
-    if (
-      (await this._isMessageFromTargetChat(
-        ctx,
-        String(this._config.groupId),
-      )) ||
-      (await this._isMessageFromTargetChat(
-        ctx,
-        String(this._config.adminsGroupId),
-      ))
-    ) {
-      console.log(`Message from target chat`);
+    const isFromGroupChat = await this._isMessageFromTargetChat(
+      ctx,
+      String(this._config.groupId),
+    );
+    const isFromAdminsChat = await this._isMessageFromTargetChat(
+      ctx,
+      String(this._config.adminsGroupId),
+    );
+
+    if (isFromGroupChat || isFromAdminsChat) {
       return;
     }
 
-    if (
-      await this._checkAndHandleIfChatMember(ctx, String(this._config.groupId))
-    ) {
+    const userTgId = ctx.from.id;
+    const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
+    if (isInDb) {
+      await ctx.reply('Привет! Вы уже заполняли анкету выпускника.');
       return;
     }
 
@@ -106,101 +175,88 @@ export class TelegramBotUpdateService {
       const text = ctx.message.text;
 
       switch (ctx.session.step) {
-        case 'start-approve':
-          await ctx.reply('Твое имя:');
-          ctx.session.step = 'name';
+        case ctxSteps.startApprove:
+          ctx.session.step = ctxNextStep.startApprove;
           break;
 
-        case 'name':
+        case ctxSteps.name:
           ctx.session.name = text;
-          await ctx.reply('Твоя фамилия:');
-          ctx.session.step = 'surname';
+          ctx.session.step = ctxNextStep[ctxSteps.name];
           break;
 
-        case 'surname':
+        case ctxSteps.surname:
           ctx.session.surname = text;
-          await ctx.reply('Твое отчество:');
-          ctx.session.step = 'fatherName';
+          ctx.session.step = ctxNextStep.surname;
           break;
 
-        case 'fatherName':
+        case ctxSteps.fatherName:
           ctx.session.fatherName = text;
-          await ctx.reply('Твоя электронная почта:');
-          ctx.session.step = 'email';
+          ctx.session.step = ctxNextStep.fatherName;
           break;
 
-        case 'email':
+        case ctxSteps.email:
           ctx.session.email = text;
-          await ctx.reply('Год окончания университета (только число):');
-          ctx.session.step = 'uniFinishedYear';
+          ctx.session.step = ctxNextStep.email;
           break;
 
-        case 'uniFinishedYear':
+        case ctxSteps.uniFinishedYear:
+          if (
+            isNaN(Number(text)) ||
+            Number(text) < 1980 ||
+            Number(text) > 2030
+          ) {
+            await ctx.reply('Необходимо ввести число от 1980 до 2030');
+            return;
+          }
+
           ctx.session.uniFinishedYear = Number(text);
-          await ctx.reply('Твой факультет (аббревиатура):');
-          ctx.session.step = 'faculty';
+          ctx.session.step = ctxNextStep.uniFinishedYear;
           break;
 
-        case 'faculty':
+        case ctxSteps.faculty:
           ctx.session.faculty = text;
-          await ctx.reply('Компания, в которой ты работаешь:');
-          ctx.session.step = 'workCompany';
+          ctx.session.step = ctxNextStep.faculty;
           break;
 
-        case 'workCompany':
+        case ctxSteps.workCompany:
           ctx.session.workCompany = text;
-          await ctx.reply('Позиция, которую ты занимаешь:');
-          ctx.session.step = 'workPosition';
+          ctx.session.step = ctxNextStep.workCompany;
           break;
 
-        case 'workPosition':
+        case ctxSteps.workPosition:
           ctx.session.workPosition = text;
-          await ctx.reply('Твои профессиональные компетенции:');
-          ctx.session.step = 'professionalСompetencies';
+          ctx.session.step = ctxNextStep.workPosition;
           break;
 
-        case 'professionalСompetencies':
+        case ctxSteps.professionalСompetencies:
           ctx.session.professionalСompetencies = text;
-          await ctx.reply(
-            'Компетенции и роли, которые готов(-а) исполнять в клубе:',
-          );
-          ctx.session.step = 'clubActivities';
+          ctx.session.step = ctxNextStep.professionalСompetencies;
           break;
 
-        case 'clubActivities':
+        case ctxSteps.clubActivities:
           ctx.session.clubActivities = text;
-          await ctx.reply(
-            'Готов(-а) уделять часть времени деятельности клуба? (да / нет)',
-          );
-          ctx.session.step = 'readyToHelpClub';
+          ctx.session.step = ctxNextStep.clubActivities;
           break;
 
-        case 'readyToHelpClub':
+        case ctxSteps.readyToHelpClub:
           ctx.session.readyToHelpClub =
             text.toLowerCase() === 'да' ? true : false;
-          await ctx.reply(
-            'Внести компанию/свои компетенции в реестр? (да / нет)\n\nРеестр - список услуг/компетенций выпускников, которыми они готовы поделиться с университетом или другими выпускниками (в качестве подрядчика/сотрудника/партнера)',
-          );
-          ctx.session.step = 'addCompanyToCatalogue';
+          ctx.session.step = ctxNextStep.readyToHelpClub;
           break;
 
-        case 'addCompanyToCatalogue':
+        case ctxSteps.addCompanyToCatalogue:
           ctx.session.addCompanyToCatalogue =
             text.toLowerCase() === 'да' ? true : false;
-          await ctx.reply(
-            'Открыть данные, внесенные в реестр, для участников клуба? (да / нет)',
-          );
-          ctx.session.step = 'openCatalogueData';
+          ctx.session.step = ctxNextStep.addCompanyToCatalogue;
           break;
 
-        case 'openCatalogueData':
+        case ctxSteps.openCatalogueData:
           ctx.session.openCatalogueData =
             text.toLowerCase() === 'да' ? true : false;
-          await ctx.reply('Опиши ценность, которую ожидаешь от клуба:');
-          ctx.session.step = 'valueFromClub';
+          ctx.session.step = ctxNextStep.openCatalogueData;
           break;
 
-        case 'valueFromClub':
+        case ctxSteps.valueFromClub:
           ctx.session.valueFromClub = text;
           /** Add user */
           const tgUser = ctx.from;
@@ -251,6 +307,7 @@ export class TelegramBotUpdateService {
         default:
           await ctx.reply('Человек, я тебя не понимаю 🥲');
       }
+      await this._handleFormStep(ctx);
     }
   }
 
@@ -290,6 +347,28 @@ export class TelegramBotUpdateService {
       console.log(`Not verify user ${username}`);
       await this._verifyUser(ctx, username, false);
       return;
+    }
+
+    /**
+     * Previous step
+     */
+    if (data.startsWith('toStep')) {
+      if (splittedData.length !== 2) {
+        this._logger.error(`Invalid callback data: ${data}`);
+        return;
+      }
+      const isInDb =
+        (await this._userService.findUserByTgId(ctx.from.id)) !== null;
+      if (isInDb) {
+        await ctx.reply(
+          'Ваша анкета выпускника уже заполнена. Для изменения информации обратитесь к администратору сообщества выпускников ИТМО.',
+        );
+        return;
+      }
+
+      const toStep = splittedData[1];
+      ctx.session.step = toStep;
+      this._handleFormStep(ctx);
     }
   }
 
@@ -343,18 +422,11 @@ export class TelegramBotUpdateService {
     }
   }
 
-  private async _checkAndHandleIfChatMember(
+  private async _checkIfChatMember(
     ctx: Context,
     chatId: string,
   ): Promise<boolean> {
-    const isChatMember = await this._isUserChatMember(ctx, chatId);
-    if (isChatMember) {
-      await ctx.reply(
-        'Привет! Я нашел тебя, ты уже состоишь в чате выпускников ИТМО!',
-        Markup.keyboard([[]]),
-      );
-    }
-    return isChatMember;
+    return await this._isUserChatMember(ctx, chatId);
   }
 
   private async _isMessageFromTargetChat(ctx: Context, chatId: string) {
@@ -362,13 +434,13 @@ export class TelegramBotUpdateService {
   }
 
   private _generateUserInfoMsg(user: UserEntity): string {
-    return (
+    const msg =
       `` +
       `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` +
       `email: ${user.email}\nОкончил факультет ${user.faculty} в ${user.uniFinishedYear} году\n` +
-      `Готов принимать участие в деят-ти клуба: ${user.readyToHelpClub}${user.readyToHelpClub ? `Роль и компетенции: ` + user.clubActivities : ''}\n` +
-      `Ценность от клуба: ${user.valueFromClub}`
-    );
+      `Готов принимать участие в деятельности клуба: ${user.readyToHelpClub ? 'да' : 'нет'}\n${user.readyToHelpClub ? `Роль и компетенции: ` + user.clubActivities + '\n' : ''}` +
+      `Ценность от клуба: ${user.valueFromClub}`;
+    return msg;
   }
 
   private async _verifyUser(@Ctx() ctx, username: string, isVerified: boolean) {
@@ -434,5 +506,23 @@ export class TelegramBotUpdateService {
 
     // verify user
     await this._setUserVerified(user, isVerified);
+  }
+
+  private _preprocessMessage(text: string): string {
+    const processed = text.replace(/[_*[\]()~>#+\-=|{}.!]/g, '\\$&');
+    return processed;
+  }
+
+  private async _handleFormStep(@Ctx() ctx, step?: string) {
+    const s = step ?? ctx.session.step;
+    const prevStep = ctxPreviousStep[s];
+    const answer = ctxStepReply[s];
+    if (typeof answer !== 'undefined' && answer.length > 0) {
+      await ctx.reply(answer, {
+        reply_markup: Markup.inlineKeyboard([
+          Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
+        ]).reply_markup,
+      });
+    }
   }
 }
