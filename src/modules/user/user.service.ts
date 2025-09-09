@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity } from './entities';
+import { UserEntity, userRoles } from './entities';
 
 @Injectable()
 export class UserService {
@@ -41,5 +41,11 @@ export class UserService {
 
   async deleteUser(id: number): Promise<void> {
     await this.userRepository.delete(id);
+  }
+
+  async isAdmin(tgId: string | number): Promise<boolean> {
+    const telegramId = String(tgId);
+    const user = await this.userRepository.findOneBy({ telegramId });
+    return user.role === userRoles.admin || user.role === userRoles.super;
   }
 }

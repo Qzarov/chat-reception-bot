@@ -1,31 +1,27 @@
 import { Context } from 'telegraf';
 
 export interface SessionData {
+  state?: string;
   step?: string; // Текущий шаг в процессе диалога
   username?: string;
   stayTuned?: string,
+  messageToSend?: TelegramMessage;
 }
 
-export interface RegisteringUserContext extends Context {
+export interface MessageFormatEntities {
+  offset: number;
+  length: number;
+  type: string;
+}
+
+
+export interface TelegramMessage {
+  text: string;
+  entities: MessageFormatEntities[];
+  fileId: string;
+  caption: string;
+}
+
+export interface UserContext extends Context {
   session: SessionData;
 }
-export const ctxSteps = {
-  startApprove: 'startApprove',
-  stayTuned: 'stayTuned',
-  verification: 'verification',
-};
-
-export const ctxNextStep = {
-  startApprove: ctxSteps.stayTuned,
-  stayTuned: ctxSteps.verification,
-};
-
-export const ctxPreviousStep = {
-  startApprove: ctxSteps.startApprove,  
-  stayTuned: ctxSteps.startApprove,
-};
-
-export const ctxStepReply = {
-  startApprove: '',
-  stayTuned: 'Подтвердите свое согласие на получение новостей от сообщества выпускников ИТМО'
-};

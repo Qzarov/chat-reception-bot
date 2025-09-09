@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { userRoles } from './user.roles';
 
 @Entity('users')
 export class UserEntity {
@@ -22,4 +23,7 @@ export class UserEntity {
 
   @Column({ type: 'int', nullable: true, default: 0 })
   isVerified?: number;
+
+  @Column({ type: 'varchar', length: 50, nullable: false, default: userRoles.user })
+  role?: string;
 }

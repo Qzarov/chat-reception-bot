@@ -4,14 +4,10 @@ import { Ctx, Start, Update, On, Command, InjectBot } from 'nestjs-telegraf';
 
 import { Context, Markup, Telegraf } from 'telegraf';
 import {
-  ctxNextStep,
-  ctxPreviousStep,
-  ctxStepReply,
-  ctxSteps,
-  RegisteringUserContext,
+  UserContext,
 } from './types';
 import { AppConfigService } from '@modules/config';
-import { UserEntity, UserService } from '@modules/user';
+import { UserEntity, userRoles, UserService } from '@modules/user';
 import { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
 @Update()
@@ -26,7 +22,7 @@ export class TelegramBotUpdateService {
   ) {}
 
   @Start()
-  async handleStart(@Ctx() ctx: RegisteringUserContext) {
+  async handleStart(@Ctx() ctx: UserContext) {
     this._logger.log('handleStart');
 
     const userTgId = ctx.from.id;
@@ -39,6 +35,7 @@ export class TelegramBotUpdateService {
         telegramId: String(tgUser.id),
         username: tgUser.username,
         isVerified: 0,
+        role: userRoles.user
       };
       await this._addUser(user);
       this._logger.log(`User @${user.username} (id ${user.telegramId}) added to DB`);
@@ -93,7 +90,7 @@ export class TelegramBotUpdateService {
   }
 
   @Command('id')
-  async handleChannelId(@Ctx() ctx: RegisteringUserContext) {
+  async handleChannelId(@Ctx() ctx: UserContext) {
     this._logger.log('handleChannelId');
     await ctx.reply(
       `Id чата: \`${ctx.chat.id}\`\nId пользователя: \`${ctx.from.id}\``,
@@ -103,7 +100,7 @@ export class TelegramBotUpdateService {
   }
 
   @Command('checkUser')
-  async handleCheckUser(@Ctx() ctx: RegisteringUserContext) {
+  async handleCheckUser(@Ctx() ctx: UserContext) {
     this._logger.log('handleCheckUser');
 
     const data = ctx.text;
@@ -184,12 +181,96 @@ export class TelegramBotUpdateService {
   }
 
   @Command('createLink')
-  async handleCreateLink(@Ctx() ctx: RegisteringUserContext) {
+  async handleCreateLink(@Ctx() ctx: UserContext) {
     await ctx.reply(
       `Данная команда недоступна`,
       { parse_mode: 'MarkdownV2' },
     );
     return;
+  }
+
+  @Command('send')
+  async handleSendCommand(@Ctx() ctx: UserContext) {
+    this._logger.log('handleSendCommand');
+    if (!(await this._userService.isAdmin(ctx.from.id))) {
+      await ctx.reply(
+        `You are not an administrator and don't have access to the bot's functionality. Just request it 😉`,
+      );
+      return;
+    }
+
+    ctx.session.state = 'awaiting_message'
+    await ctx.reply(`Отправьте сообщение для рассылки:`);
+    return;
+  }
+
+  @On('text')
+  async handleText(@Ctx() ctx) {
+    this._logger.log('handleText');
+    console.log('session data:', ctx.session)
+    if (ctx.session.state === 'awaiting_message') {
+
+      ctx.session.messageToSend = {
+        type: "text",
+        text: ctx.message.text, 
+        entities: ctx.message.entities,
+      };
+      
+      ctx.session.state = 'confirming_message';
+
+      const recipients = await this._userService.findUsers({stayTuned: true});
+
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes', callback_data: 'confirm_send' },
+              { text: '↩️ Replace', callback_data: 'new_message' },
+              { text: '❌ Cancel', callback_data: 'cancel' }
+            ],
+          ],
+        },
+      };
+
+      await ctx.reply(
+        `Подтвердите отправку сообщения ${recipients.length} участникам`,
+        keyboard,
+      );
+    }
+  }
+
+  @On('photo')
+  async handlePhoto(@Ctx() ctx) {
+    if (ctx.session.state === 'awaiting_message') {
+      const photos = ctx.message.photo;
+
+      ctx.session.messageToSend = { 
+        type: 'photo', 
+        fileId: photos[photos.length - 1].file_id, // Берем самое большое изображение 
+        caption: ctx.message.caption || '', 
+        caption_entities: ctx.message.caption_entities 
+      };
+      ctx.session.state = 'confirming_message';
+  
+      const recipients = await this._userService.findUsers({stayTuned: true});
+  
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes', callback_data: 'confirm_send' },
+              { text: '↩️ Replace', callback_data: 'new_message' },
+              { text: '❌ Cancel', callback_data: 'cancel' }
+            ],
+          ],
+        },
+      };
+  
+      await ctx.reply(
+        `Подтвердите отправку сообщения ${recipients.length} участникам`,
+        keyboard,
+      );
+    }
   }
 
   @On('callback_query')
@@ -265,10 +346,75 @@ export class TelegramBotUpdateService {
       );
       return;
     }
+
+    /**
+     * Подтверждение старта рассылки
+     */
+    if (data === 'confirm_send') {
+      const selectedUsers = await this._userService.findUsers({stayTuned: true});
+
+      if (!selectedUsers.length) {
+        await ctx.reply('No chats selected.');
+        return;
+      }
+
+      const message = ctx.session.messageToSend;
+      let i = 0
+      for (const user of selectedUsers) {
+        try {
+          if (message.type === 'text') {
+            await ctx.telegram.sendMessage(user.telegramId, message.text, { 
+              entities: message.entities,
+              disable_web_page_preview: false,
+            });
+
+          } else if (message.type === 'photo') {
+            await ctx.telegram.sendPhoto(user.telegramId, message.fileId, { 
+              caption: message.caption,
+              caption_entities: message.caption_entities,
+            });
+          }
+
+          i += 1;
+          await ctx.editMessageText(
+            `Sending message: ${i} / ${selectedUsers.length}`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } catch (error) {
+          console.error(`Error at user ${user.username} (id ${user.telegramId}):`, error);
+        }
+      }
+
+      await ctx.reply(`Done ✅`);
+      ctx.session.state = null;
+      ctx.session.messageToSend = null;
+      return;
+    }
+
+    /**
+     * Ожидание нового сообщения для рассылки
+     */
+    if (data === 'new_message') {
+      ctx.session.state = 'awaiting_message';
+      await ctx.reply('Отправьте новое сообщение:');
+      return;
+    }
+
+    /**
+     * Отмена команд
+     */
+    if (data === 'cancel') {
+      await ctx.editMessageText(
+        `Команда отменена. Для дальнейшей работы отправьте новую команду`,
+        { reply_markup: undefined },
+      );
+      return;
+    }
+
   }
 
   private async _generateInviteLink(
-    @Ctx() ctx: RegisteringUserContext,
+    @Ctx() ctx: UserContext,
     chatId: number,
     expireDate?: number,
   ): Promise<string> {
@@ -288,6 +434,11 @@ export class TelegramBotUpdateService {
 
   private async _setUserVerified(user: UserEntity, isVerified: boolean) {
     user.isVerified = isVerified ? 1 : -1;
+    await this._userService.updateUser(user);
+  }
+
+  private async _setUserStayTuned(user: UserEntity, stayTuned: boolean) {
+    user.stayTuned = stayTuned;
     await this._userService.updateUser(user);
   }
 
@@ -397,6 +548,7 @@ export class TelegramBotUpdateService {
 
     // verify user
     await this._setUserVerified(user, isVerified);
+    await this._setUserStayTuned(user, true);
   }
 
   private _preprocessMessage(text: string): string {
