@@ -12,6 +12,7 @@ import {
 } from './types';
 import { AppConfigService } from '@modules/config';
 import { UserEntity, UserService } from '@modules/user';
+import { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
 @Update()
 @Injectable()
@@ -29,29 +30,66 @@ export class TelegramBotUpdateService {
     this._logger.log('handleStart');
 
     const userTgId = ctx.from.id;
-    const isChatMember = await this._checkIfChatMember(
-      ctx,
-      String(this._config.groupId),
-    );
     const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
 
-    if (isInDb && isChatMember) {
-      await ctx.reply('Привет! Вы уже заполняли анкету и состоите в чате.');
-      return;
-    }
-
+    // If user not in DB
     if (!isInDb) {
+      const tgUser = ctx.from;
+      const user: UserEntity = {
+        telegramId: String(tgUser.id),
+        username: tgUser.username,
+        isVerified: 0,
+      };
+      await this._addUser(user);
+      this._logger.log(`User @${user.username} (id ${user.telegramId}) added to DB`);
+
+      const keyboard: InlineKeyboardMarkup = {
+        inline_keyboard: [[
+          {
+            text: 'Даю согласие ✅',
+            callback_data: 'subscribeNews',
+          },
+        ]],
+      };
+
       await ctx.reply(
-        'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, необходимо заполнить форму.',
-        Markup.keyboard([['Приступим!']])
-          .resize()
-          .oneTime(),
+        'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, необходимо дать согласие на получение новостей сообщества выпускников ИТМО и пройти проверку администраторов.',
+        {
+          reply_markup: keyboard
+        }
       );
-      ctx.session = { step: ctxSteps.startApprove };
+      // ctx.session = { step: ctxSteps.startApprove };
       return;
     }
 
-    await ctx.reply('Привет! Не знаю, что и сказать...');
+    // If user in DB
+    const user = await this._userService.findUserByTgId(ctx.from.id)
+    
+    // Check if verificated
+    if (user.isVerified) {
+      // Check if chat member
+      const isChatMember = await this._checkIfChatMember(
+        ctx,
+        String(this._config.groupId),
+      );
+      if (isChatMember) {
+        // Answer user verified and subscribed
+        await ctx.reply(
+          'Привет! Вы уже верифицированы как член сообщества и состоите в чате выпускников ИТМО',
+        );
+        return;
+
+      } else {
+        // Answer join group
+        await ctx.reply(
+          `Привет! Вы уже верифицированы как член сообщества, но не состоите в чате. Приглашаем присоединиться по ссылке: ${await this._generateInviteLink(ctx, this._config.groupId)}`,
+        );
+        return;
+      }
+    }
+
+    // User still not verificated
+    await ctx.reply('Вы еще не были верифицированы администраторами сообщества выпускников ИТМО');
   }
 
   @Command('id')
@@ -146,169 +184,12 @@ export class TelegramBotUpdateService {
   }
 
   @Command('createLink')
-  async handleCreateLink(@Ctx() ctx: RegisteringUserContext) {}
-
-  @On('text')
-  async handleText(@Ctx() ctx: RegisteringUserContext) {
-    this._logger.log('handleText');
-    const isFromGroupChat = await this._isMessageFromTargetChat(
-      ctx,
-      String(this._config.groupId),
+  async handleCreateLink(@Ctx() ctx: RegisteringUserContext) {
+    await ctx.reply(
+      `Данная команда недоступна`,
+      { parse_mode: 'MarkdownV2' },
     );
-    const isFromAdminsChat = await this._isMessageFromTargetChat(
-      ctx,
-      String(this._config.adminsGroupId),
-    );
-
-    if (isFromGroupChat || isFromAdminsChat) {
-      return;
-    }
-
-    const userTgId = ctx.from.id;
-    const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
-    if (isInDb) {
-      await ctx.reply('Привет! Вы уже заполняли анкету выпускника.');
-      return;
-    }
-
-    if ('text' in ctx.message) {
-      const text = ctx.message.text;
-
-      switch (ctx.session.step) {
-        case ctxSteps.startApprove:
-          ctx.session.step = ctxNextStep.startApprove;
-          break;
-
-        case ctxSteps.name:
-          ctx.session.name = text;
-          ctx.session.step = ctxNextStep[ctxSteps.name];
-          break;
-
-        case ctxSteps.surname:
-          ctx.session.surname = text;
-          ctx.session.step = ctxNextStep.surname;
-          break;
-
-        case ctxSteps.fatherName:
-          ctx.session.fatherName = text;
-          ctx.session.step = ctxNextStep.fatherName;
-          break;
-
-        case ctxSteps.email:
-          ctx.session.email = text;
-          ctx.session.step = ctxNextStep.email;
-          break;
-
-        case ctxSteps.uniFinishedYear:
-          if (
-            isNaN(Number(text)) ||
-            Number(text) < 1980 ||
-            Number(text) > 2030
-          ) {
-            await ctx.reply('Необходимо ввести число от 1980 до 2030');
-            return;
-          }
-
-          ctx.session.uniFinishedYear = Number(text);
-          ctx.session.step = ctxNextStep.uniFinishedYear;
-          break;
-
-        case ctxSteps.faculty:
-          ctx.session.faculty = text;
-          ctx.session.step = ctxNextStep.faculty;
-          break;
-
-        case ctxSteps.workCompany:
-          ctx.session.workCompany = text;
-          ctx.session.step = ctxNextStep.workCompany;
-          break;
-
-        case ctxSteps.workPosition:
-          ctx.session.workPosition = text;
-          ctx.session.step = ctxNextStep.workPosition;
-          break;
-
-        case ctxSteps.professionalСompetencies:
-          ctx.session.professionalСompetencies = text;
-          ctx.session.step = ctxNextStep.professionalСompetencies;
-          break;
-
-        case ctxSteps.clubActivities:
-          ctx.session.clubActivities = text;
-          ctx.session.step = ctxNextStep.clubActivities;
-          break;
-
-        case ctxSteps.readyToHelpClub:
-          ctx.session.readyToHelpClub =
-            text.toLowerCase() === 'да' ? true : false;
-          ctx.session.step = ctxNextStep.readyToHelpClub;
-          break;
-
-        case ctxSteps.addCompanyToCatalogue:
-          ctx.session.addCompanyToCatalogue =
-            text.toLowerCase() === 'да' ? true : false;
-          ctx.session.step = ctxNextStep.addCompanyToCatalogue;
-          break;
-
-        case ctxSteps.openCatalogueData:
-          ctx.session.openCatalogueData =
-            text.toLowerCase() === 'да' ? true : false;
-          ctx.session.step = ctxNextStep.openCatalogueData;
-          break;
-
-        case ctxSteps.valueFromClub:
-          ctx.session.valueFromClub = text;
-          /** Add user */
-          const tgUser = ctx.from;
-          const user: UserEntity = {
-            telegramId: String(tgUser.id),
-            firstName: ctx.session.name,
-            lastName: ctx.session.surname,
-            username: tgUser.username,
-            fatherName: ctx.session.fatherName,
-            email: ctx.session.email,
-            uniFinishedYear: ctx.session.uniFinishedYear,
-            faculty: ctx.session.faculty,
-            workCompany: ctx.session.workCompany,
-            workPosition: ctx.session.workPosition,
-            professionalСompetencies: ctx.session.professionalСompetencies,
-            clubActivities: ctx.session.clubActivities,
-            readyToHelpClub: ctx.session.readyToHelpClub,
-            addCompanyToCatalogue: ctx.session.addCompanyToCatalogue,
-            openCatalogueData: ctx.session.openCatalogueData,
-            valueFromClub: ctx.session.valueFromClub,
-            isVerified: 0,
-          };
-          await this._addUser(user);
-
-          // send message to admins group
-          const keyboard = Markup.inlineKeyboard([
-            Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
-            Markup.button.callback(
-              '❌ нет',
-              `userNotAlumni:${tgUser.username}`,
-            ),
-          ]);
-
-          await this.bot.telegram.sendMessage(
-            this._config.adminsGroupId,
-            `Пользователь @${tgUser.username} прислал анкету:\n ${this._generateUserInfoMsg(user)}. \n\nВерифицировать участника?`,
-            { reply_markup: keyboard.reply_markup },
-          );
-
-          /** Reply  */
-          await ctx.reply(
-            `Спасибо! Ваш запрос на вступление в клуб выпускников ИТМО отправлен администраторам. Как только они подтвердят, что вы учились в ИТМО, я пришлю ссылку на вступления в группу.`,
-          );
-
-          ctx.session.step = 'verification';
-          break;
-
-        default:
-          await ctx.reply('Человек, я тебя не понимаю 🥲');
-      }
-      await this._handleFormStep(ctx);
-    }
+    return;
   }
 
   @On('callback_query')
@@ -320,11 +201,13 @@ export class TelegramBotUpdateService {
     if (!data) return;
 
     const splittedData = data.split(':');
+    this._logger.log(`splitted callback data: ${splittedData}`);
 
     /**
      * User verified
      */
     if (data.startsWith('userIsAlumni')) {
+      this._logger.log(`User verified as Alumni`);
       if (splittedData.length !== 2) {
         this._logger.error(`Invalid callback data: ${data}`);
         return;
@@ -338,6 +221,7 @@ export class TelegramBotUpdateService {
      * User not verified
      */
     if (data.startsWith('userNotAlumni')) {
+      this._logger.log(`User not verified`);
       if (splittedData.length !== 2) {
         this._logger.error(`Invalid callback data: ${data}`);
         return;
@@ -350,25 +234,36 @@ export class TelegramBotUpdateService {
     }
 
     /**
-     * Previous step
+     * User want to receive news 
      */
-    if (data.startsWith('toStep')) {
-      if (splittedData.length !== 2) {
+    if (data.startsWith('subscribeNews')) {
+      this._logger.log(`User agree to subscribe news`);
+      if (splittedData.length !== 1) {
         this._logger.error(`Invalid callback data: ${data}`);
         return;
       }
-      const isInDb =
-        (await this._userService.findUserByTgId(ctx.from.id)) !== null;
-      if (isInDb) {
-        await ctx.reply(
-          'Ваша анкета выпускника уже заполнена. Для изменения информации обратитесь к администратору сообщества выпускников ИТМО.',
-        );
-        return;
-      }
+      const tgUser = ctx.from;
 
-      const toStep = splittedData[1];
-      ctx.session.step = toStep;
-      this._handleFormStep(ctx);
+      // send message to admins group
+      const keyboard = Markup.inlineKeyboard([
+        Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
+        Markup.button.callback(
+          '❌ нет',
+          `userNotAlumni:${tgUser.username}`,
+        ),
+      ]);
+
+      await this.bot.telegram.sendMessage(
+        this._config.adminsGroupId,
+        `Пользователь @${tgUser.username} отправил запрос на верификацию.\n\nВерифицировать участника?`,
+        { reply_markup: keyboard.reply_markup },
+      );
+
+      /** Reply  */
+      await ctx.reply(
+        `Спасибо! Ваш запрос на вступление в клуб выпускников ИТМО отправлен администраторам. Как только они подтвердят, что вы учились в ИТМО, я пришлю ссылку на вступления в группу.`,
+      );
+      return;
     }
   }
 
@@ -378,7 +273,7 @@ export class TelegramBotUpdateService {
     expireDate?: number,
   ): Promise<string> {
     try {
-      console.log(`Generating link`);
+      this._logger.log(`Generating link`);
       const inviteLink = await ctx.telegram.createChatInviteLink(chatId, {
         expire_date: expireDate,
         // expire_date: Math.floor(Date.now() / 1000) + 1800, // Срок действия: 30 минут
@@ -435,11 +330,7 @@ export class TelegramBotUpdateService {
 
   private _generateUserInfoMsg(user: UserEntity): string {
     const msg =
-      `` +
-      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` +
-      `email: ${user.email}\nОкончил факультет ${user.faculty} в ${user.uniFinishedYear} году\n` +
-      `Готов принимать участие в деятельности клуба: ${user.readyToHelpClub ? 'да' : 'нет'}\n${user.readyToHelpClub ? `Роль и компетенции: ` + user.clubActivities + '\n' : ''}` +
-      `Ценность от клуба: ${user.valueFromClub}`;
+      `Фамиля, имя: ${user.lastName} ${user.firstName}`;
     return msg;
   }
 
@@ -511,18 +402,5 @@ export class TelegramBotUpdateService {
   private _preprocessMessage(text: string): string {
     const processed = text.replace(/[_*[\]()~>#+\-=|{}.!]/g, '\\$&');
     return processed;
-  }
-
-  private async _handleFormStep(@Ctx() ctx, step?: string) {
-    const s = step ?? ctx.session.step;
-    const prevStep = ctxPreviousStep[s];
-    const answer = ctxStepReply[s];
-    if (typeof answer !== 'undefined' && answer.length > 0) {
-      await ctx.reply(answer, {
-        reply_markup: Markup.inlineKeyboard([
-          Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
-        ]).reply_markup,
-      });
-    }
   }
 }

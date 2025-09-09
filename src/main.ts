@@ -9,8 +9,8 @@ async function bootstrap() {
   const appConfig: AppConfigService = app.get(AppConfigService);
 
   const config = new DocumentBuilder()
-    .setTitle('Sentiment BFF')
-    .setDescription('The Sentiment BFF API description')
+    .setTitle('Alumnis chat receptionist ')
+    .setDescription('The Alumnis chat receptionist  API description')
     .setVersion('1.0')
     .build();
 

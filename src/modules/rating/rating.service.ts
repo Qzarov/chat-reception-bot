@@ -11,12 +11,10 @@ export class RatingService {
   ) {}
 
   async addRating(
-    userId: number,
     scores: number,
     comment: string,
   ): Promise<RatingEntity> {
     const newRating = this._ratingRepository.create({
-      user: { id: userId },
       scores,
       comment,
     });
@@ -24,7 +22,7 @@ export class RatingService {
   }
 
   async getRatingsByUserId(userId: number): Promise<RatingEntity[]> {
-    return this._ratingRepository.find({ where: { user: { id: userId } } });
+    return this._ratingRepository.find();
   }
 
   async deleteRating(id: number): Promise<void> {

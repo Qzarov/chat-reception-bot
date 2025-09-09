@@ -12,7 +12,7 @@ export class RatingController {
     @Body('scores') scores: number,
     @Body('comment') comment: string,
   ): Promise<RatingEntity> {
-    return this.userRatingsService.addRating(userId, scores, comment);
+    return this.userRatingsService.addRating(scores, comment);
   }
 
   @Get(':userId')
