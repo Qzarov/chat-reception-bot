@@ -4,6 +4,8 @@ import { Ctx, Start, Update, On, Command, InjectBot } from 'nestjs-telegraf';
 
 import { Context, Markup, Telegraf } from 'telegraf';
 import {
+  ctxNextStep,
+  ctxSteps,
   UserContext,
 } from './types';
 import { AppConfigService } from '@modules/config';
@@ -50,7 +52,7 @@ export class TelegramBotUpdateService {
       };
 
       await ctx.reply(
-        'Привет! Перед тем, как вступить в чат сообщества выпускников ИТМО, необходимо дать согласие на получение новостей сообщества выпускников ИТМО и пройти проверку администраторов.',
+        'Привет! Благодарим за интерес к клубу выпускников ИТМО. Перед тем как присоединиться к нашему чату, пожалуйста, подтвердите свой статус выпускника и подпишитесь на новости сообщества.\nСпасибо за понимание — будем рады видеть вас в нашей дружной команде!',
         {
           reply_markup: keyboard
         }
@@ -207,6 +209,27 @@ export class TelegramBotUpdateService {
   @On('text')
   async handleText(@Ctx() ctx) {
     this._logger.log('handleText');
+
+    // Check if msg not from DM
+    const isFromGroupChat = await this._isMessageFromTargetChat(
+      ctx,
+      String(this._config.groupId),
+    );
+    const isFromAdminsChat = await this._isMessageFromTargetChat(
+      ctx,
+      String(this._config.adminsGroupId),
+    );
+    if (isFromGroupChat || isFromAdminsChat) {
+      return;
+    }
+
+    const userTgId = ctx.from.id;
+    const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
+    if (isInDb) {
+      await ctx.reply('Привет! Вы уже заполняли анкету выпускника.');
+      return;
+    }
+
     console.log('session data:', ctx.session)
     if (ctx.session.state === 'awaiting_message') {
 
@@ -236,6 +259,45 @@ export class TelegramBotUpdateService {
         `Подтвердите отправку сообщения ${recipients.length} участникам`,
         keyboard,
       );
+    }
+
+    if ('text' in ctx.message) {
+      const text = ctx.message.text;
+
+      switch (ctx.session.step) {
+        case ctxSteps.startApprove:
+          ctx.session.step = ctxNextStep.startApprove;
+          break;
+
+        case ctxSteps.name:
+          ctx.session.name = text;
+          ctx.session.step = ctxNextStep[ctxSteps.name];
+          break;
+
+        case ctxSteps.surname:
+          ctx.session.surname = text;
+          ctx.session.step = ctxNextStep.surname;
+          break;
+
+        case ctxSteps.fatherName:
+          ctx.session.fatherName = text;
+          ctx.session.step = ctxNextStep.fatherName;
+          break;
+
+        case ctxSteps.uniFinishedYear:
+          if (
+            isNaN(Number(text)) ||
+            Number(text) < 1980 ||
+            Number(text) > 2030
+          ) {
+            await ctx.reply('Необходимо ввести число от 1980 до 2030');
+            return;
+          }
+
+          ctx.session.uniFinishedYear = Number(text);
+          ctx.session.step = ctxNextStep.uniFinishedYear;
+          break;
+      }
     }
   }
 
@@ -336,7 +398,7 @@ export class TelegramBotUpdateService {
 
       await this.bot.telegram.sendMessage(
         this._config.adminsGroupId,
-        `Пользователь @${tgUser.username} отправил запрос на верификацию.\n\nВерифицировать участника?`,
+        `Пользователь @${tgUser.username}) отправил запрос на верификацию.\n\nВерифицировать участника?`,
         { reply_markup: keyboard.reply_markup },
       );
 

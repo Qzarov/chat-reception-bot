@@ -15,6 +15,15 @@ export class UserEntity {
   @Column({ type: 'text', nullable: true })
   lastName?: string;
 
+  @Column({ type: 'text', nullable: true })
+  fatherName?: string;
+
+  @Column({ type: 'text', nullable: true })
+  faculty?: string;
+
+  @Column({ type: 'text', nullable: true })
+  uniFinishedYear?: string;
+
   @Column({ type: 'bool', default: false })
   stayTuned?: boolean;
 
