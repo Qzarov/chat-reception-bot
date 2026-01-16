@@ -5,6 +5,8 @@ import { Ctx, Start, Update, On, Command, InjectBot } from 'nestjs-telegraf';
 import { Context, Markup, Telegraf } from 'telegraf';
 import {
   ctxNextStep,
+  ctxPreviousStep,
+  ctxStepReply,
   ctxSteps,
   UserContext,
 } from './types';
@@ -42,20 +44,8 @@ export class TelegramBotUpdateService {
       await this._addUser(user);
       this._logger.log(`User @${user.username} (id ${user.telegramId}) added to DB`);
 
-      const keyboard: InlineKeyboardMarkup = {
-        inline_keyboard: [[
-          {
-            text: 'Даю согласие ✅',
-            callback_data: 'subscribeNews',
-          },
-        ]],
-      };
-
       await ctx.reply(
-        'Привет! Благодарим за интерес к клубу выпускников ИТМО. Перед тем как присоединиться к нашему чату, пожалуйста, подтвердите свой статус выпускника и подпишитесь на новости сообщества.\nСпасибо за понимание — будем рады видеть вас в нашей дружной команде!',
-        {
-          reply_markup: keyboard
-        }
+        'Привет! Благодарим за интерес к клубу выпускников ИТМО. Перед тем как присоединиться к нашему чату, пожалуйста, подтвердите свой статус выпускника и подпишитесь на новости сообщества в канале @itmoalumni.\nСпасибо за понимание — будем рады видеть вас в нашей дружной команде!',
       );
       // ctx.session = { step: ctxSteps.startApprove };
       return;
@@ -287,17 +277,57 @@ export class TelegramBotUpdateService {
         case ctxSteps.uniFinishedYear:
           if (
             isNaN(Number(text)) ||
-            Number(text) < 1980 ||
-            Number(text) > 2030
+            Number(text) < 1950 ||
+            Number(text) > 2035
           ) {
-            await ctx.reply('Необходимо ввести число от 1980 до 2030');
+            await ctx.reply('Необходимо ввести число от 1950 до 2035');
             return;
           }
 
           ctx.session.uniFinishedYear = Number(text);
           ctx.session.step = ctxNextStep.uniFinishedYear;
           break;
+
+        case ctxSteps.faculty:
+          ctx.session.faculty = text;
+          
+          /** Add user info */
+          const tgUser = ctx.from;
+          const user: UserEntity = {
+            telegramId: String(tgUser.id),
+            firstName: ctx.session.name,
+            lastName: ctx.session.surname,
+            username: tgUser.username,
+            fatherName: ctx.session.fatherName,
+            uniFinishedYear: ctx.session.uniFinishedYear,
+            faculty: ctx.session.faculty,
+          }
+
+          await this._addUser(user);
+
+          // Send message to admins group
+          const keyboard = Markup.inlineKeyboard([
+            Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
+            Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.username}`),
+          ])
+
+          await this.bot.telegram.sendMessage(
+            this._config.adminsGroupId,
+            `Пользователь @${tgUser.username} прислал анкету.\n` +
+            `${this._generateUserInfoMsg(user)}` + 
+            `\n\nВерифицировать участника?`,
+            { reply_markup: keyboard.reply_markup}, 
+          )
+
+          // Reply to user
+          await ctx.reply(
+            ctxStepReply.verification
+          )
+
+          ctx.session.step = 'verification'
+          break;
       }
+      await this._handleFormStep(ctx)
     }
   }
 
@@ -345,6 +375,18 @@ export class TelegramBotUpdateService {
 
     const splittedData = data.split(':');
     this._logger.log(`splitted callback data: ${splittedData}`);
+
+    /**
+     * Previous step
+     */
+    if (data.startsWith('toStep')) {
+      if (splittedData !== 2) {
+        this._logger.error(`Invalid callback data`)
+      }
+      const toStep = splittedData[1];
+      ctx.session.step = toStep;
+      this._handleFormStep(ctx);
+    }
 
     /**
      * User verified
@@ -543,7 +585,8 @@ export class TelegramBotUpdateService {
 
   private _generateUserInfoMsg(user: UserEntity): string {
     const msg =
-      `Фамиля, имя: ${user.lastName} ${user.firstName}`;
+      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}` + 
+      `Факультет: ${user.faculty} (выпуск ${user.uniFinishedYear} года)`;
     return msg;
   }
 
@@ -617,4 +660,18 @@ export class TelegramBotUpdateService {
     const processed = text.replace(/[_*[\]()~>#+\-=|{}.!]/g, '\\$&');
     return processed;
   }
+
+  private async _handleFormStep(@Ctx() ctx, step?: string) {
+    const s = step ?? ctx.session.step;
+    const prevStep = ctxPreviousStep[s];
+    const answer = ctxStepReply[s];
+    if (typeof answer !== 'undefined' && answer.length > 0) {
+      await ctx.reply(answer, {
+        reply_markup: Markup.inlineKeyboard([
+          Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
+        ]).reply_markup,
+      });
+    }
+  }
+
 }

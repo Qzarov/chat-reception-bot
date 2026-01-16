@@ -49,6 +49,7 @@ export const ctxNextStep = {
   surname: ctxSteps.fatherName,
   fatherName: ctxSteps.uniFinishedYear,
   uniFinishedYear: ctxSteps.faculty,
+  faculty: ctxSteps.verification,
 };
 
 export const ctxPreviousStep = {
@@ -58,6 +59,7 @@ export const ctxPreviousStep = {
   fatherName: ctxSteps.surname,
   uniFinishedYear: ctxSteps.fatherName,
   faculty: ctxSteps.uniFinishedYear,
+  verification: ctxSteps.faculty,
 };
 
 export const ctxStepReply = {
@@ -67,4 +69,5 @@ export const ctxStepReply = {
   fatherName: 'Ваше отчество:',
   uniFinishedYear: 'Год окончания университета (только номер года):',
   faculty: 'Ваш факультет:',
+  verification: 'Обрабатываем ваши данные. Как только ваш статус выпускника будет подтвержден, мы отправим вам ссылку на чат клуба.\nСпасибо за терпение!'
 };
