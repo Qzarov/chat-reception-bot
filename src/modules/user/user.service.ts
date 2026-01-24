@@ -18,6 +18,7 @@ export class UserService {
       return this.userRepository.save(newUser);
     } else {
       console.log(`User @${user.username} already exists!`);
+      this.userRepository.update({telegramId: user.telegramId}, {...user});
       return oldUser;
     }
   }

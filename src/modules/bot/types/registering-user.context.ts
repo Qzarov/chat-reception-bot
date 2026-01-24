@@ -19,16 +19,16 @@ export interface MessageFormatEntities {
   type: string;
 }
 
-
 export const ctxSteps = {
   startApprove: 'startApprove',
   stayTuned: 'stayTuned',
-  verification: 'verification',
   name: 'name',
   surname: 'surname',
   fatherName: 'fatherName',
   uniFinishedYear: 'uniFinishedYear',
   faculty: 'faculty',
+  verification: 'verification',
+  verified: 'verified',
 };
 
 export interface TelegramMessage {
@@ -50,6 +50,7 @@ export const ctxNextStep = {
   fatherName: ctxSteps.uniFinishedYear,
   uniFinishedYear: ctxSteps.faculty,
   faculty: ctxSteps.verification,
+  verification: ctxSteps.verified,
 };
 
 export const ctxPreviousStep = {
@@ -60,6 +61,7 @@ export const ctxPreviousStep = {
   uniFinishedYear: ctxSteps.fatherName,
   faculty: ctxSteps.uniFinishedYear,
   verification: ctxSteps.faculty,
+  verified: ctxSteps.verification,
 };
 
 export const ctxStepReply = {
@@ -69,5 +71,6 @@ export const ctxStepReply = {
   fatherName: 'Ваше отчество:',
   uniFinishedYear: 'Год окончания университета (только номер года):',
   faculty: 'Ваш факультет:',
-  verification: 'Обрабатываем ваши данные. Как только ваш статус выпускника будет подтвержден, мы отправим вам ссылку на чат клуба.\nСпасибо за терпение!'
+  verification: 'Обрабатываем ваши данные. Как только ваш статус выпускника будет подтвержден, мы отправим вам ссылку на чат клуба.\nСпасибо за терпение!',
+  verified: 'Администраторы клуба уже обработали вашу заявку на вступление'
 };

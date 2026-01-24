@@ -12,7 +12,6 @@ import {
 } from './types';
 import { AppConfigService } from '@modules/config';
 import { UserEntity, userRoles, UserService } from '@modules/user';
-import { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
 @Update()
 @Injectable()
@@ -31,6 +30,7 @@ export class TelegramBotUpdateService {
 
     const userTgId = ctx.from.id;
     const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
+    this._logger.log(`User ${userTgId} ${isInDb ? 'is' : 'not'} in db`)
 
     // If user not in DB
     if (!isInDb) {
@@ -44,9 +44,15 @@ export class TelegramBotUpdateService {
       await this._addUser(user);
       this._logger.log(`User @${user.username} (id ${user.telegramId}) added to DB`);
 
-      await ctx.reply(
-        'Привет! Благодарим за интерес к клубу выпускников ИТМО. Перед тем как присоединиться к нашему чату, пожалуйста, подтвердите свой статус выпускника и подпишитесь на новости сообщества в канале @itmoalumni.\nСпасибо за понимание — будем рады видеть вас в нашей дружной команде!',
-      );
+
+      const replyText = 'Привет! \n\nБлагодарим за интерес к клубу выпускников ИТМО.' +
+       ' Перед тем как присоединиться к нашему чату, пожалуйста, заполните форму и подпишитесь на новости сообщества в канале @itmoalumni.' + 
+       '\n\nБудем рады видеть вас в нашей дружной команде!' 
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('Приступим', 'start_form_filling')]
+      ])
+      await ctx.reply(replyText, keyboard);
       // ctx.session = { step: ctxSteps.startApprove };
       return;
     }
@@ -214,11 +220,6 @@ export class TelegramBotUpdateService {
     }
 
     const userTgId = ctx.from.id;
-    const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
-    if (isInDb) {
-      await ctx.reply('Привет! Вы уже заполняли анкету выпускника.');
-      return;
-    }
 
     console.log('session data:', ctx.session)
     if (ctx.session.state === 'awaiting_message') {
@@ -301,6 +302,7 @@ export class TelegramBotUpdateService {
             fatherName: ctx.session.fatherName,
             uniFinishedYear: ctx.session.uniFinishedYear,
             faculty: ctx.session.faculty,
+            isVerified: 0,
           }
 
           await this._addUser(user);
@@ -320,12 +322,16 @@ export class TelegramBotUpdateService {
           )
 
           // Reply to user
-          await ctx.reply(
-            ctxStepReply.verification
-          )
+          await ctx.reply(ctxStepReply.verification)
+          ctx.session.step = ctxSteps.verification
+          return;
 
-          ctx.session.step = 'verification'
-          break;
+          case ctxSteps.verification:
+            const isVerified = await this._isUserVerified(userTgId);
+            ctx.session.step = isVerified === 1 || isVerified === -1 
+              ? ctxSteps.verified 
+              : ctxSteps.verification; 
+            break;
       }
       await this._handleFormStep(ctx)
     }
@@ -389,7 +395,7 @@ export class TelegramBotUpdateService {
     }
 
     /**
-     * User verified
+     * Verify user command
      */
     if (data.startsWith('userIsAlumni')) {
       this._logger.log(`User verified as Alumni`);
@@ -398,12 +404,24 @@ export class TelegramBotUpdateService {
         return;
       }
       const username = splittedData[1];
+      ctx.session.step = ctxSteps.verified;
       await this._verifyUser(ctx, username, true);
       return;
     }
 
     /**
-     * User not verified
+     * Start form filling
+     */
+    if (data === 'start_form_filling') {
+      this._logger.log(`User start filling form`);
+
+      ctx.session.step = ctxSteps.name;
+      await ctx.reply(ctxStepReply.name)
+      return;
+    }
+
+    /**
+     * Command to set user not verified
      */
     if (data.startsWith('userNotAlumni')) {
       this._logger.log(`User not verified`);
@@ -414,6 +432,7 @@ export class TelegramBotUpdateService {
       const username = splittedData[1];
 
       console.log(`Not verify user ${username}`);
+      ctx.session.step = ctxSteps.verified;
       await this._verifyUser(ctx, username, false);
       return;
     }
@@ -452,7 +471,7 @@ export class TelegramBotUpdateService {
     }
 
     /**
-     * Подтверждение старта рассылки
+     * Подтверждение старта рассылки (от админа)
      */
     if (data === 'confirm_send') {
       const selectedUsers = await this._userService.findUsers({stayTuned: true});
@@ -554,6 +573,15 @@ export class TelegramBotUpdateService {
     }
   }
 
+  private async _isUserVerified(telegramId: number): Promise<number> {
+    try {
+      const user = await this._userService.findUserByTgId(telegramId);
+      return user.isVerified;
+    } catch (error) {
+      console.error(`Failed to check if user ${telegramId} verificated:`, error.message);
+    }
+  }
+
   private async _isUserChatMember(
     ctx: Context,
     chatId: string,
@@ -585,7 +613,7 @@ export class TelegramBotUpdateService {
 
   private _generateUserInfoMsg(user: UserEntity): string {
     const msg =
-      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}` + 
+      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` + 
       `Факультет: ${user.faculty} (выпуск ${user.uniFinishedYear} года)`;
     return msg;
   }
@@ -636,7 +664,7 @@ export class TelegramBotUpdateService {
       // send invite link to user
       await this.bot.telegram.sendMessage(
         user.telegramId,
-        `Ваше обучение в ИТМО было подтверждено. Одноразовая ссылка для вступления в группу: ${inviteLink}`,
+        `Отличные новости! Ваш статус выпускника подтвержден — добро пожаловать в клуб! \nОдноразовая ссылка для вступления в группу: ${inviteLink}`,
       );
     } else {
       // reply in chat
@@ -647,7 +675,7 @@ export class TelegramBotUpdateService {
       // send invite link to user
       await this.bot.telegram.sendMessage(
         user.telegramId,
-        `Ваше обучение в ИТМО не подтверждено`,
+        `Спасибо за терпение. К сожалению, не удалось подтвердить ваш статус выпускника. Возможно, в данных есть ошибка.\n\nПопробуйте подать заявку заново или напишите нам на почту: alumni@itmo.ru.`,
       );
     }
 
@@ -665,12 +693,19 @@ export class TelegramBotUpdateService {
     const s = step ?? ctx.session.step;
     const prevStep = ctxPreviousStep[s];
     const answer = ctxStepReply[s];
+
+    const stepsWithoutBack = [
+      ctxSteps.name,
+      ctxSteps.verification,
+      ctxSteps.verified,
+    ]
+
     if (typeof answer !== 'undefined' && answer.length > 0) {
-      await ctx.reply(answer, {
-        reply_markup: Markup.inlineKeyboard([
-          Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
-        ]).reply_markup,
-      });
+      const reply_markup = !stepsWithoutBack.includes(s) ? Markup.inlineKeyboard([
+        Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
+      ]).reply_markup : undefined;
+
+      await ctx.reply(answer, { reply_markup });
     }
   }
 
