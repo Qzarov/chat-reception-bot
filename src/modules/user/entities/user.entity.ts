@@ -24,7 +24,7 @@ export class UserEntity {
   @Column({ type: 'text', nullable: true })
   uniFinishedYear?: string;
 
-  @Column({ type: 'bool', default: false })
+  @Column({ type: 'bool', default: true })
   stayTuned?: boolean;
 
   @Column({ type: 'text', nullable: true })
@@ -33,6 +33,11 @@ export class UserEntity {
   @Column({ type: 'int', nullable: true, default: 0 })
   isVerified?: number;
 
-  @Column({ type: 'varchar', length: 50, nullable: false, default: userRoles.user })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    nullable: false,
+    default: userRoles.user,
+  })
   role?: string;
 }

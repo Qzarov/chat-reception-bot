@@ -10,11 +10,10 @@
     "paths": {
       "@core/*": ["./src/core/*"],
       "@modules/*": ["./src/modules/*"],
-      "@config/*": ["src/modules/config"],
+      "@config/*": ["./src/modules/config"],
     },
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,

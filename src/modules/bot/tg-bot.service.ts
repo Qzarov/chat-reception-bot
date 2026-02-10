@@ -30,7 +30,7 @@ export class TelegramBotUpdateService {
 
     const userTgId = ctx.from.id;
     const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
-    this._logger.log(`User ${userTgId} ${isInDb ? 'is' : 'not'} in db`)
+    this._logger.log(`User ${userTgId} ${isInDb ? 'is' : 'not'} in db`);
 
     // If user not in DB
     if (!isInDb) {
@@ -39,27 +39,29 @@ export class TelegramBotUpdateService {
         telegramId: String(tgUser.id),
         username: tgUser.username,
         isVerified: 0,
-        role: userRoles.user
+        role: userRoles.user,
       };
       await this._addUser(user);
-      this._logger.log(`User @${user.username} (id ${user.telegramId}) added to DB`);
+      this._logger.log(
+        `User @${user.username} (id ${user.telegramId}) added to DB`,
+      );
 
-
-      const replyText = 'Привет! \n\nБлагодарим за интерес к клубу выпускников ИТМО.' +
-       ' Перед тем как присоединиться к нашему чату, пожалуйста, заполните форму и подпишитесь на новости сообщества в канале @itmoalumni.' + 
-       '\n\nБудем рады видеть вас в нашей дружной команде!' 
+      const replyText =
+        'Привет! \n\nБлагодарим за интерес к клубу выпускников ИТМО.' +
+        ' Перед тем как присоединиться к нашему чату, пожалуйста, заполните форму и подпишитесь на новости сообщества в канале @itmoalumni.' +
+        '\n\nБудем рады видеть вас в нашей дружной команде!';
 
       const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('Приступим', 'start_form_filling')]
-      ])
+        [Markup.button.callback('Приступим', 'start_form_filling')],
+      ]);
       await ctx.reply(replyText, keyboard);
       // ctx.session = { step: ctxSteps.startApprove };
       return;
     }
 
     // If user in DB
-    const user = await this._userService.findUserByTgId(ctx.from.id)
-    
+    const user = await this._userService.findUserByTgId(ctx.from.id);
+
     // Check if verificated
     if (user.isVerified) {
       // Check if chat member
@@ -73,7 +75,6 @@ export class TelegramBotUpdateService {
           'Привет! Вы уже верифицированы как член сообщества и состоите в чате выпускников ИТМО',
         );
         return;
-
       } else {
         // Answer join group
         await ctx.reply(
@@ -84,7 +85,9 @@ export class TelegramBotUpdateService {
     }
 
     // User still not verificated
-    await ctx.reply('Вы еще не были верифицированы администраторами сообщества выпускников ИТМО');
+    await ctx.reply(
+      'Вы еще не были верифицированы администраторами сообщества выпускников ИТМО',
+    );
   }
 
   @Command('id')
@@ -180,10 +183,7 @@ export class TelegramBotUpdateService {
 
   @Command('createLink')
   async handleCreateLink(@Ctx() ctx: UserContext) {
-    await ctx.reply(
-      `Данная команда недоступна`,
-      { parse_mode: 'MarkdownV2' },
-    );
+    await ctx.reply(`Данная команда недоступна`, { parse_mode: 'MarkdownV2' });
     return;
   }
 
@@ -197,7 +197,7 @@ export class TelegramBotUpdateService {
       return;
     }
 
-    ctx.session.state = 'awaiting_message'
+    ctx.session.state = 'awaiting_message';
     await ctx.reply(`Отправьте сообщение для рассылки:`);
     return;
   }
@@ -221,18 +221,17 @@ export class TelegramBotUpdateService {
 
     const userTgId = ctx.from.id;
 
-    console.log('session data:', ctx.session)
+    console.log('session data:', ctx.session);
     if (ctx.session.state === 'awaiting_message') {
-
       ctx.session.messageToSend = {
-        type: "text",
-        text: ctx.message.text, 
+        type: 'text',
+        text: ctx.message.text,
         entities: ctx.message.entities,
       };
-      
+
       ctx.session.state = 'confirming_message';
 
-      const recipients = await this._userService.findUsers({stayTuned: true});
+      const recipients = await this._userService.findUsers({ stayTuned: true });
 
       const keyboard = {
         reply_markup: {
@@ -240,7 +239,7 @@ export class TelegramBotUpdateService {
             [
               { text: '✅ Yes', callback_data: 'confirm_send' },
               { text: '↩️ Replace', callback_data: 'new_message' },
-              { text: '❌ Cancel', callback_data: 'cancel' }
+              { text: '❌ Cancel', callback_data: 'cancel' },
             ],
           ],
         },
@@ -291,7 +290,7 @@ export class TelegramBotUpdateService {
 
         case ctxSteps.faculty:
           ctx.session.faculty = text;
-          
+
           /** Add user info */
           const tgUser = ctx.from;
           const user: UserEntity = {
@@ -303,37 +302,50 @@ export class TelegramBotUpdateService {
             uniFinishedYear: ctx.session.uniFinishedYear,
             faculty: ctx.session.faculty,
             isVerified: 0,
-          }
+          };
 
           await this._addUser(user);
 
           // Send message to admins group
           const keyboard = Markup.inlineKeyboard([
             Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
-            Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.username}`),
-          ])
+            Markup.button.callback(
+              '❌ нет',
+              `userNotAlumni:${tgUser.username}`,
+            ),
+          ]);
 
           await this.bot.telegram.sendMessage(
             this._config.adminsGroupId,
             `Пользователь @${tgUser.username} прислал анкету.\n` +
-            `${this._generateUserInfoMsg(user)}` + 
-            `\n\nВерифицировать участника?`,
-            { reply_markup: keyboard.reply_markup}, 
-          )
+              `${this._generateUserInfoMsg(user)}` +
+              `\n\nВерифицировать участника?`,
+            { reply_markup: keyboard.reply_markup },
+          );
 
           // Reply to user
-          await ctx.reply(ctxStepReply.verification)
-          ctx.session.step = ctxSteps.verification
+          await ctx.reply(ctxStepReply.verification);
+          ctx.session.step = ctxSteps.verification;
+
+          await ctx.replyWithVideo(
+            'BAACAgIAAxkBAAFCKnFpi4xEKDT5LJcfIZKgyHW0wY0CwQACiZEAAmAxYUgZnmgIIFHjDDoE',
+            {
+              caption: ctxStepReply.verification1,
+              parse_mode: 'Markdown',
+            },
+          );
+
           return;
 
-          case ctxSteps.verification:
-            const isVerified = await this._isUserVerified(userTgId);
-            ctx.session.step = isVerified === 1 || isVerified === -1 
-              ? ctxSteps.verified 
-              : ctxSteps.verification; 
-            break;
+        case ctxSteps.verification:
+          const isVerified = await this._isUserVerified(userTgId);
+          ctx.session.step =
+            isVerified === 1 || isVerified === -1
+              ? ctxSteps.verified
+              : ctxSteps.verification;
+          break;
       }
-      await this._handleFormStep(ctx)
+      await this._handleFormStep(ctx);
     }
   }
 
@@ -342,28 +354,28 @@ export class TelegramBotUpdateService {
     if (ctx.session.state === 'awaiting_message') {
       const photos = ctx.message.photo;
 
-      ctx.session.messageToSend = { 
-        type: 'photo', 
-        fileId: photos[photos.length - 1].file_id, // Берем самое большое изображение 
-        caption: ctx.message.caption || '', 
-        caption_entities: ctx.message.caption_entities 
+      ctx.session.messageToSend = {
+        type: 'photo',
+        fileId: photos[photos.length - 1].file_id, // Берем самое большое изображение
+        caption: ctx.message.caption || '',
+        caption_entities: ctx.message.caption_entities,
       };
       ctx.session.state = 'confirming_message';
-  
-      const recipients = await this._userService.findUsers({stayTuned: true});
-  
+
+      const recipients = await this._userService.findUsers({ stayTuned: true });
+
       const keyboard = {
         reply_markup: {
           inline_keyboard: [
             [
               { text: '✅ Yes', callback_data: 'confirm_send' },
               { text: '↩️ Replace', callback_data: 'new_message' },
-              { text: '❌ Cancel', callback_data: 'cancel' }
+              { text: '❌ Cancel', callback_data: 'cancel' },
             ],
           ],
         },
       };
-  
+
       await ctx.reply(
         `Подтвердите отправку сообщения ${recipients.length} участникам`,
         keyboard,
@@ -373,7 +385,7 @@ export class TelegramBotUpdateService {
 
   @On('callback_query')
   async handleCallbackQuery(@Ctx() ctx) {
-    this._logger.log('handleCallbackQuery');
+    this._logger.log('handleCallbackQuery:', ctx);
 
     const data = ctx.callbackQuery?.data;
     this._logger.log(`callback data: ${data}`);
@@ -387,7 +399,7 @@ export class TelegramBotUpdateService {
      */
     if (data.startsWith('toStep')) {
       if (splittedData !== 2) {
-        this._logger.error(`Invalid callback data`)
+        this._logger.error(`Invalid callback data`);
       }
       const toStep = splittedData[1];
       ctx.session.step = toStep;
@@ -416,7 +428,7 @@ export class TelegramBotUpdateService {
       this._logger.log(`User start filling form`);
 
       ctx.session.step = ctxSteps.name;
-      await ctx.reply(ctxStepReply.name)
+      await ctx.reply(ctxStepReply.name);
       return;
     }
 
@@ -438,7 +450,7 @@ export class TelegramBotUpdateService {
     }
 
     /**
-     * User want to receive news 
+     * User want to receive news
      */
     if (data.startsWith('subscribeNews')) {
       this._logger.log(`User agree to subscribe news`);
@@ -451,10 +463,7 @@ export class TelegramBotUpdateService {
       // send message to admins group
       const keyboard = Markup.inlineKeyboard([
         Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
-        Markup.button.callback(
-          '❌ нет',
-          `userNotAlumni:${tgUser.username}`,
-        ),
+        Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.username}`),
       ]);
 
       await this.bot.telegram.sendMessage(
@@ -474,7 +483,9 @@ export class TelegramBotUpdateService {
      * Подтверждение старта рассылки (от админа)
      */
     if (data === 'confirm_send') {
-      const selectedUsers = await this._userService.findUsers({stayTuned: true});
+      const selectedUsers = await this._userService.findUsers({
+        stayTuned: true,
+      });
 
       if (!selectedUsers.length) {
         await ctx.reply('No chats selected.');
@@ -482,17 +493,16 @@ export class TelegramBotUpdateService {
       }
 
       const message = ctx.session.messageToSend;
-      let i = 0
+      let i = 0;
       for (const user of selectedUsers) {
         try {
           if (message.type === 'text') {
-            await ctx.telegram.sendMessage(user.telegramId, message.text, { 
+            await ctx.telegram.sendMessage(user.telegramId, message.text, {
               entities: message.entities,
               disable_web_page_preview: false,
             });
-
           } else if (message.type === 'photo') {
-            await ctx.telegram.sendPhoto(user.telegramId, message.fileId, { 
+            await ctx.telegram.sendPhoto(user.telegramId, message.fileId, {
               caption: message.caption,
               caption_entities: message.caption_entities,
             });
@@ -502,9 +512,12 @@ export class TelegramBotUpdateService {
           await ctx.editMessageText(
             `Sending message: ${i} / ${selectedUsers.length}`,
           );
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         } catch (error) {
-          console.error(`Error at user ${user.username} (id ${user.telegramId}):`, error);
+          console.error(
+            `Error at user ${user.username} (id ${user.telegramId}):`,
+            error,
+          );
         }
       }
 
@@ -533,7 +546,6 @@ export class TelegramBotUpdateService {
       );
       return;
     }
-
   }
 
   private async _generateInviteLink(
@@ -578,7 +590,10 @@ export class TelegramBotUpdateService {
       const user = await this._userService.findUserByTgId(telegramId);
       return user.isVerified;
     } catch (error) {
-      console.error(`Failed to check if user ${telegramId} verificated:`, error.message);
+      console.error(
+        `Failed to check if user ${telegramId} verificated:`,
+        error.message,
+      );
     }
   }
 
@@ -613,7 +628,7 @@ export class TelegramBotUpdateService {
 
   private _generateUserInfoMsg(user: UserEntity): string {
     const msg =
-      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` + 
+      `ФИО: ${user.lastName} ${user.firstName} ${user.fatherName}\n` +
       `Факультет: ${user.faculty} (выпуск ${user.uniFinishedYear} года)`;
     return msg;
   }
@@ -657,9 +672,21 @@ export class TelegramBotUpdateService {
       }
 
       // reply in chat
-      await ctx.reply(
-        `Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`,
-      );
+      try {
+        await ctx.reply(
+          `Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`,
+        );
+      } catch (err: any) {
+        console.error('SendMessage error:', err);
+
+        const params = err?.on?.payload?.parameters || err?.parameters;
+        if (params?.migrate_to_chat_id) {
+          console.log('NEW CHAT ID:', params.migrate_to_chat_id);
+          // здесь можно сразу сохранить новый chat_id в БД
+        }
+
+        throw err;
+      }
 
       // send invite link to user
       await this.bot.telegram.sendMessage(
@@ -698,15 +725,16 @@ export class TelegramBotUpdateService {
       ctxSteps.name,
       ctxSteps.verification,
       ctxSteps.verified,
-    ]
+    ];
 
     if (typeof answer !== 'undefined' && answer.length > 0) {
-      const reply_markup = !stepsWithoutBack.includes(s) ? Markup.inlineKeyboard([
-        Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
-      ]).reply_markup : undefined;
+      const reply_markup = !stepsWithoutBack.includes(s)
+        ? Markup.inlineKeyboard([
+            Markup.button.callback('⬅️ назад', `toStep:${prevStep}`),
+          ]).reply_markup
+        : undefined;
 
       await ctx.reply(answer, { reply_markup });
     }
   }
-
 }
