@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index } from 'typeorm';
 import { userRoles } from './user.roles';
 
 @Entity('users')
@@ -6,6 +6,7 @@ export class UserEntity {
   @PrimaryGeneratedColumn({})
   id?: number;
 
+  @Index('idx_users_telegram_id_unique', { unique: true })
   @Column({ type: 'text', nullable: true })
   telegramId?: string;
 

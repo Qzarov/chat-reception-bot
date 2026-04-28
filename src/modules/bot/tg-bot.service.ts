@@ -43,7 +43,7 @@ export class TelegramBotUpdateService {
       };
       await this._addUser(user);
       this._logger.log(
-        `User @${user.username} (id ${user.telegramId}) added to DB`,
+        `User ${this._formatUserLabel(user)} added to DB`,
       );
 
       const replyText =
@@ -110,38 +110,20 @@ export class TelegramBotUpdateService {
     const splittedData = data.split(' ');
     if (splittedData.length !== 2) {
       await ctx.reply(
-        `Некорректный формат команды. Отправьте команду в формате /checkUser 'userTgId' или /checkUser 'username'`,
+        `Некорректный формат команды. Отправьте команду в формате /checkUser 'userTgId'`,
       );
       return;
     }
 
     const userIdentifier: string = splittedData[1];
-    if (isNaN(Number(userIdentifier))) {
-      const users = await this._userService.findUsers({
-        username: userIdentifier,
+    const user = await this._userService.findUserByTgId(userIdentifier);
+    if (user !== null) {
+      const msg = `${this._formatUserLabel(user)} найден:\n\n${this._generateUserInfoMsg(user)}`;
+      await ctx.reply(this._preprocessMessage(msg), {
+        parse_mode: 'MarkdownV2',
       });
-      if (users.length !== 1) {
-        await ctx.reply(
-          `По юзернейму @${userIdentifier} найдено ${users.length} пользователей`,
-        );
-      } else {
-        const user = users[0];
-        const msg = `Пользователь @${user.username} (id \`${user.telegramId}\`) найден:\n\n${this._generateUserInfoMsg(user)}`;
-        await ctx.reply(this._preprocessMessage(msg), {
-          parse_mode: 'MarkdownV2',
-        });
-      }
     } else {
-      const user = await this._userService.findUserByTgId(userIdentifier);
-      if (user !== null) {
-        const msg = this._generateUserInfoMsg(user);
-        await ctx.reply(
-          `Пользователь @${user.username} \(id \`${user.telegramId}\`) найден:\n\n${'ee'}`,
-          { parse_mode: 'MarkdownV2' },
-        );
-      } else {
-        await ctx.reply(`Пользователь id ${userIdentifier} не найден`);
-      }
+      await ctx.reply(`Пользователь с id ${userIdentifier} не найден`);
     }
 
     // await ctx.reply(
@@ -163,22 +145,25 @@ export class TelegramBotUpdateService {
       return;
     }
 
-    // parse username
+    // parse telegram id
     const msgText: string = ctx.update.message.text;
     const splittedMsgText = msgText.split(' ');
 
-    // if no username -> send reply "need username"
+    // if no id -> send reply "need telegram id"
     if (splittedMsgText.length !== 2) {
       await ctx.reply(
-        `Необходимо указать username пользователя (без символа "@"). Например /verify user_name`,
+        `Необходимо указать telegram id пользователя. Например /verify 123456789`,
       );
       return;
     }
 
-    // check if user not in db -> send reply user should apply for participance
-    const username = splittedMsgText[1];
+    const telegramId = splittedMsgText[1];
+    if (isNaN(Number(telegramId))) {
+      await ctx.reply(`Telegram id должен быть числом. Например /verify 123456789`);
+      return;
+    }
 
-    await this._verifyUser(ctx, username, true);
+    await this._verifyUser(ctx, telegramId, true);
   }
 
   @Command('createLink')
@@ -308,16 +293,16 @@ export class TelegramBotUpdateService {
 
           // Send message to admins group
           const keyboard = Markup.inlineKeyboard([
-            Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
+            Markup.button.callback('✅ да', `userIsAlumni:${tgUser.id}`),
             Markup.button.callback(
               '❌ нет',
-              `userNotAlumni:${tgUser.username}`,
+              `userNotAlumni:${tgUser.id}`,
             ),
           ]);
 
           await this.bot.telegram.sendMessage(
             this._config.adminsGroupId,
-            `Пользователь @${tgUser.username} прислал анкету.\n` +
+            `Пользователь ${this._formatTelegramUserLabel(tgUser)} прислал анкету.\n` +
               `${this._generateUserInfoMsg(user)}` +
               `\n\nВерифицировать участника?`,
             { reply_markup: keyboard.reply_markup },
@@ -415,9 +400,9 @@ export class TelegramBotUpdateService {
         this._logger.error(`Invalid callback data: ${data}`);
         return;
       }
-      const username = splittedData[1];
+      const telegramId = splittedData[1];
       ctx.session.step = ctxSteps.verified;
-      await this._verifyUser(ctx, username, true);
+      await this._verifyUser(ctx, telegramId, true);
       return;
     }
 
@@ -441,11 +426,11 @@ export class TelegramBotUpdateService {
         this._logger.error(`Invalid callback data: ${data}`);
         return;
       }
-      const username = splittedData[1];
+      const telegramId = splittedData[1];
 
-      console.log(`Not verify user ${username}`);
+      console.log(`Not verify user ${telegramId}`);
       ctx.session.step = ctxSteps.verified;
-      await this._verifyUser(ctx, username, false);
+      await this._verifyUser(ctx, telegramId, false);
       return;
     }
 
@@ -462,13 +447,13 @@ export class TelegramBotUpdateService {
 
       // send message to admins group
       const keyboard = Markup.inlineKeyboard([
-        Markup.button.callback('✅ да', `userIsAlumni:${tgUser.username}`),
-        Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.username}`),
+        Markup.button.callback('✅ да', `userIsAlumni:${tgUser.id}`),
+        Markup.button.callback('❌ нет', `userNotAlumni:${tgUser.id}`),
       ]);
 
       await this.bot.telegram.sendMessage(
         this._config.adminsGroupId,
-        `Пользователь @${tgUser.username}) отправил запрос на верификацию.\n\nВерифицировать участника?`,
+        `Пользователь ${this._formatTelegramUserLabel(tgUser)} отправил запрос на верификацию.\n\nВерифицировать участника?`,
         { reply_markup: keyboard.reply_markup },
       );
 
@@ -581,7 +566,7 @@ export class TelegramBotUpdateService {
     try {
       await this._userService.createUser(user);
     } catch (error) {
-      console.error(`Failed to add user @${user.username}:`, error.message);
+      console.error(`Failed to add user ${this._formatUserLabel(user)}:`, error.message);
     }
   }
 
@@ -633,27 +618,23 @@ export class TelegramBotUpdateService {
     return msg;
   }
 
-  private async _verifyUser(@Ctx() ctx, username: string, isVerified: boolean) {
-    const users = await this._userService.findUsers({ username });
+  private async _verifyUser(
+    @Ctx() ctx,
+    telegramId: string,
+    isVerified: boolean,
+  ) {
+    const user = await this._userService.findUserByTgId(telegramId);
 
-    if (users.length === 0) {
+    if (user === null) {
       await ctx.reply(
-        `Пользователь не найден. Возможно он не заполнил анкету через бота либо необходимо проверить правильность написания его юзернейма`,
+        `Пользователь с id ${telegramId} не найден. Возможно он еще не заполнил анкету через бота.`,
       );
       return;
     }
 
-    if (users.length > 1) {
-      await ctx.reply(
-        `Найдено несколько пользователей. Такого не должно быть, обратитесь к администратору БД`,
-      );
-      return;
-    }
-
-    const user = users[0];
     if (user.isVerified === 1 || user.isVerified === -1) {
       await ctx.reply(
-        `Верификация пользователя @${username} уже была проведена. Результат: ${user.isVerified === 1 ? 'одобрено' : 'отклонено'}`,
+        `Верификация пользователя ${this._formatUserLabel(user)} уже была проведена. Результат: ${user.isVerified === 1 ? 'одобрено' : 'отклонено'}`,
       );
       return;
     }
@@ -674,7 +655,7 @@ export class TelegramBotUpdateService {
       // reply in chat
       try {
         await ctx.reply(
-          `Пользователь @${username} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`,
+          `Пользователь ${this._formatUserLabel(user)} верифицирован. Одноразовая ссылка для вступления в группу (${inviteLink}) отправлена пользователю в личные сообщения`,
         );
       } catch (err: any) {
         console.error('SendMessage error:', err);
@@ -696,7 +677,7 @@ export class TelegramBotUpdateService {
     } else {
       // reply in chat
       await ctx.reply(
-        `Запрос пользователя @${username} отклонен, пользователь получил уведомление в личные сообщения`,
+        `Запрос пользователя ${this._formatUserLabel(user)} отклонен, пользователь получил уведомление в личные сообщения`,
       );
 
       // send invite link to user
@@ -714,6 +695,18 @@ export class TelegramBotUpdateService {
   private _preprocessMessage(text: string): string {
     const processed = text.replace(/[_*[\]()~>#+\-=|{}.!]/g, '\\$&');
     return processed;
+  }
+
+  private _formatUserLabel(user: UserEntity): string {
+    return user.username
+      ? `@${user.username} (id ${user.telegramId})`
+      : `id ${user.telegramId}`;
+  }
+
+  private _formatTelegramUserLabel(tgUser: UserContext['from']): string {
+    return tgUser.username
+      ? `@${tgUser.username} (id ${tgUser.id})`
+      : `id ${tgUser.id}`;
   }
 
   private async _handleFormStep(@Ctx() ctx, step?: string) {

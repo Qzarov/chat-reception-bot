@@ -1,99 +1,115 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Chat Reception Bot
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Telegram-бот для приема заявок в чат выпускников ИТМО.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Бот собирает анкету пользователя, отправляет ее в админский чат и после подтверждения выдает одноразовую ссылку на вступление в основной чат. Пользователи идентифицируются по Telegram id (`ctx.from.id`), потому что `username` в Telegram необязателен и может отсутствовать или измениться.
 
-## Description
+## Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- NestJS 10
+- nestjs-telegraf / telegraf
+- TypeORM
+- PostgreSQL
+- Jest
 
-## Project setup
+## Environment
+
+Создайте `.env` по примеру `env.example`.
 
 ```bash
-$ npm install
+APP_ENV="local"
+APP_PORT=3000
+
+BOT_TOKEN=""
+
+DB_HOST="127.0.0.1"
+DB_PORT=5432
+DB_USER="user"
+DB_PASS="pass"
+DB_NAME="chat_reception_bot"
+
+GROUP_ID=-1001
+ADMINS_GROUP_ID=-1002
 ```
 
-## Compile and run the project
+Переменные:
+
+- `BOT_TOKEN` - токен Telegram-бота от BotFather.
+- `GROUP_ID` - id основного чата, куда бот создает invite-ссылки.
+- `ADMINS_GROUP_ID` - id админского чата, куда отправляются анкеты и откуда разрешена команда `/verify`.
+- `APP_ENV` - в `production` TypeORM `synchronize` отключен.
+
+## Install
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
+## Run
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Production build:
 
 ```bash
-$ npm install -g mau
-$ mau deploy
+npm run build
+npm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Bot Flow
 
-## Resources
+1. Пользователь пишет `/start` в личные сообщения боту.
+2. Бот сохраняет пользователя по `telegramId`.
+3. Пользователь заполняет анкету.
+4. Бот отправляет анкету в `ADMINS_GROUP_ID` с кнопками подтверждения.
+5. Администратор подтверждает или отклоняет заявку.
+6. При подтверждении бот создает одноразовую invite-ссылку в `GROUP_ID` и отправляет ее пользователю в личные сообщения.
 
-Check out a few resources that may come in handy when working with NestJS:
+## Commands
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `/start` - начать сценарий подачи заявки или проверить текущий статус.
+- `/id` - показать id текущего чата и Telegram id пользователя.
+- `/checkUser <telegramId>` - найти пользователя по Telegram id.
+- `/verify <telegramId>` - вручную подтвердить пользователя по Telegram id. Команда работает только из админского чата.
+- `/send` - начать рассылку пользователям, у которых `stayTuned=true`. Доступно администраторам.
 
-## Support
+## User Identity
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Основной идентификатор пользователя - `users.telegramId`.
 
-## Stay in touch
+`username` хранится только как дополнительная подпись для логов и сообщений администраторам. На него нельзя опираться для поиска, верификации или callback-data, потому что:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- у пользователя может не быть `username`;
+- пользователь может изменить `username`;
+- `username` не является стабильным техническим идентификатором.
 
-## License
+В entity добавлен уникальный индекс `idx_users_telegram_id_unique` на `telegramId`. В локальной среде с `synchronize=true` TypeORM применит его автоматически. В production, где `synchronize=false`, индекс нужно добавить миграцией или SQL:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```sql
+CREATE UNIQUE INDEX idx_users_telegram_id_unique ON users ("telegramId");
+```
+
+Перед добавлением индекса в существующей базе проверьте дубли:
+
+```sql
+SELECT "telegramId", COUNT(*)
+FROM users
+WHERE "telegramId" IS NOT NULL
+GROUP BY "telegramId"
+HAVING COUNT(*) > 1;
+```
+
+## Tests
+
+```bash
+npm run test
+npm run test:e2e
+```
+
+## Notes
+
+- Бот должен быть администратором основного чата, чтобы создавать invite-ссылки.
+- Пользователь должен сначала написать боту, иначе Telegram не позволит отправить ему личное сообщение.
+- README описывает текущую архитектуру без миграционного слоя. Если проект пойдет в production, стоит добавить TypeORM migrations вместо `synchronize`.

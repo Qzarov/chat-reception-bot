@@ -47,6 +47,10 @@ export class UserService {
   async isAdmin(tgId: string | number): Promise<boolean> {
     const telegramId = String(tgId);
     const user = await this.userRepository.findOneBy({ telegramId });
+    if (user === null) {
+      return false;
+    }
+
     return user.role === userRoles.admin || user.role === userRoles.super;
   }
 }
