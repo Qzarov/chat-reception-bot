@@ -28,7 +28,7 @@ export const buildSendSettingsKeyboard = (
     ],
     [
       {
-        text: `Группы: ${settings.selectedGroupIds.length} из ${knownGroupsCount}`,
+        text: 'Группы',
         callback_data: 'send_select_groups',
       },
     ],
@@ -62,3 +62,14 @@ export const buildSendSettingsKeyboard = (
 
   return { inline_keyboard };
 };
+
+export const buildSendSettingsText = (
+  settings: SendSettings,
+  privateRecipientsCount: number,
+  knownGroupsCount: number,
+) =>
+  [
+    'Настройте отправку.',
+    `Получателей в личку: ${privateRecipientsCount}`,
+    `Группы: выбрано ${settings.selectedGroupIds.length} из ${knownGroupsCount}`,
+  ].join('\n');

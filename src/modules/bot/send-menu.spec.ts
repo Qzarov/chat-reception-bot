@@ -1,9 +1,9 @@
-import { buildSendSettingsKeyboard, toggleSelectedGroup } from './send-menu';
+import { buildSendSettingsKeyboard, buildSendSettingsText, toggleSelectedGroup } from './send-menu';
 import { SendSettings } from './types';
 import { TelegramChatEntity } from '@modules/send';
 
 const baseSettings: SendSettings = {
-  includePrivate: true,
+  includePrivate: false,
   includeGroups: false,
   includeParticipation: false,
   selectedGroupIds: [],
@@ -13,9 +13,9 @@ describe('send-menu', () => {
   it('renders toggles and selected group count', () => {
     const keyboard = buildSendSettingsKeyboard(baseSettings, 3);
 
-    expect(keyboard.inline_keyboard[0][0].text).toBe('☑ В личку участникам');
+    expect(keyboard.inline_keyboard[0][0].text).toBe('☐ В личку участникам');
     expect(keyboard.inline_keyboard[1][0].text).toBe('☐ В группы');
-    expect(keyboard.inline_keyboard[2][0].text).toBe('Группы: 0 из 3');
+    expect(keyboard.inline_keyboard[2][0].text).toBe('Группы');
     expect(keyboard.inline_keyboard[3][0].text).toBe('☐ Добавить кнопки участия');
   });
 
@@ -38,5 +38,15 @@ describe('send-menu', () => {
 
     expect(keyboard.inline_keyboard[3][0].text).toBe('☐ Main');
     expect(keyboard.inline_keyboard[4][0].text).toBe('☑ Test');
+  });
+
+  it('renders selected group count in settings text', () => {
+    expect(
+      buildSendSettingsText(
+        { ...baseSettings, selectedGroupIds: ['-1002'] },
+        12,
+        3,
+      ),
+    ).toBe('Настройте отправку.\nПолучателей в личку: 12\nГруппы: выбрано 1 из 3');
   });
 });

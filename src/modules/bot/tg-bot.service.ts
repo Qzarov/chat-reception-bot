@@ -13,7 +13,7 @@ import {
 import { AppConfigService } from '@modules/config';
 import { UserEntity, userRoles, UserService } from '@modules/user';
 import { SendCampaignEntity, SendService, TelegramChatEntity } from '@modules/send';
-import { buildSendSettingsKeyboard, toggleSelectedGroup } from './send-menu';
+import { buildSendSettingsKeyboard, buildSendSettingsText, toggleSelectedGroup } from './send-menu';
 import { SendSettings, TelegramMessage } from './types';
 import { buildHelpMessage } from './help-message';
 import { buildParticipationReplyMarkup } from './participation-keyboard';
@@ -670,7 +670,7 @@ export class TelegramBotUpdateService {
 
   private _getDefaultSendSettings(): SendSettings {
     return {
-      includePrivate: true,
+      includePrivate: false,
       includeGroups: false,
       includeParticipation: false,
       selectedGroupIds: [],
@@ -684,17 +684,26 @@ export class TelegramBotUpdateService {
   private async _replySendSettings(ctx: UserContext) {
     const recipients = await this._userService.findUsers({ stayTuned: true });
     const groups = await this._sendService.listActiveChats();
+    const settings = this._getSessionSendSettings(ctx);
     await ctx.reply(
-      `Настройте отправку. Получателей в личку: ${recipients.length}`,
-      { reply_markup: buildSendSettingsKeyboard(this._getSessionSendSettings(ctx), groups.length) },
+      buildSendSettingsText(settings, recipients.length, groups.length),
+      { reply_markup: buildSendSettingsKeyboard(settings, groups.length) },
     );
   }
 
   private async _editSendSettings(ctx: UserContext, showGroups = false) {
+    const recipients = await this._userService.findUsers({ stayTuned: true });
     const groups = await this._sendService.listActiveChats();
     const settings = this._getSessionSendSettings(ctx);
-    await ctx.editMessageReplyMarkup(
-      buildSendSettingsKeyboard(settings, groups.length, showGroups ? groups : undefined),
+    await ctx.editMessageText(
+      buildSendSettingsText(settings, recipients.length, groups.length),
+      {
+        reply_markup: buildSendSettingsKeyboard(
+          settings,
+          groups.length,
+          showGroups ? groups : undefined,
+        ),
+      },
     );
     await ctx.answerCbQuery();
   }
