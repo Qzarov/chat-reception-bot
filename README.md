@@ -58,6 +58,14 @@ npm run build
 npm run start:prod
 ```
 
+Production migrations:
+
+```bash
+npm run migration:run
+```
+
+When `APP_ENV=production`, the app also runs configured TypeORM migrations on startup via `migrationsRun`. Keep `synchronize=false` in production.
+
 ## Bot Flow
 
 1. Пользователь пишет `/start` в личные сообщения боту.
@@ -129,4 +137,4 @@ npm run test:e2e
 - Бот должен быть администратором основного чата, чтобы создавать invite-ссылки.
 - Для `/send` в группы/каналы бот должен быть добавлен в эти чаты и иметь право отправлять сообщения.
 - Пользователь должен сначала написать боту, иначе Telegram не позволит отправить ему личное сообщение.
-- README описывает текущую архитектуру без миграционного слоя. Если проект пойдет в production, стоит добавить TypeORM migrations вместо `synchronize`.
+- Production schema changes are handled by TypeORM migrations in `src/migrations`.
