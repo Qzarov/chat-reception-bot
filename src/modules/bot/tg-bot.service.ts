@@ -412,11 +412,6 @@ export class TelegramBotUpdateService {
       return;
     }
 
-    if (data === 'send_select_groups') {
-      await this._editSendSettings(ctx, true);
-      return;
-    }
-
     if (data.startsWith('send_group:')) {
       const chatId = data.slice('send_group:'.length);
       const settings = this._getSessionSendSettings(ctx);
@@ -425,11 +420,6 @@ export class TelegramBotUpdateService {
         includeGroups: true,
         selectedGroupIds: toggleSelectedGroup(settings.selectedGroupIds, chatId),
       };
-      await this._editSendSettings(ctx, true);
-      return;
-    }
-
-    if (data === 'send_groups_done') {
       await this._editSendSettings(ctx);
       return;
     }
@@ -691,7 +681,7 @@ export class TelegramBotUpdateService {
     );
   }
 
-  private async _editSendSettings(ctx: UserContext, showGroups = false) {
+  private async _editSendSettings(ctx: UserContext) {
     const recipients = await this._userService.findUsers({ stayTuned: true });
     const groups = await this._sendService.listActiveChats();
     const settings = this._getSessionSendSettings(ctx);
@@ -701,7 +691,7 @@ export class TelegramBotUpdateService {
         reply_markup: buildSendSettingsKeyboard(
           settings,
           groups.length,
-          showGroups ? groups : undefined,
+          groups,
         ),
       },
     );

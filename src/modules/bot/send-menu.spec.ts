@@ -13,10 +13,10 @@ describe('send-menu', () => {
   it('renders toggles and selected group count', () => {
     const keyboard = buildSendSettingsKeyboard(baseSettings, 3);
 
-    expect(keyboard.inline_keyboard[0][0].text).toBe('☐ В личку участникам');
-    expect(keyboard.inline_keyboard[1][0].text).toBe('☐ В группы');
-    expect(keyboard.inline_keyboard[2][0].text).toBe('Группы');
-    expect(keyboard.inline_keyboard[3][0].text).toBe('☐ Добавить кнопки участия');
+    expect(keyboard.inline_keyboard[0][0].text).toBe('☐ В личку');
+    expect(keyboard.inline_keyboard[0][1].text).toBe('☐ В группы');
+    expect(keyboard.inline_keyboard[0][2].text).toBe('☐ Участие');
+    expect(keyboard.inline_keyboard[1][0].text).toBe('✅ Отправить');
   });
 
   it('toggles a group id without duplicates', () => {
@@ -24,10 +24,11 @@ describe('send-menu', () => {
     expect(toggleSelectedGroup(['-1001'], '-1002')).toEqual(['-1001', '-1002']);
   });
 
-  it('renders selected group menu items', () => {
+  it('renders selected group menu items two per row without done button', () => {
     const chats: TelegramChatEntity[] = [
       { id: 1, chatId: '-1001', title: 'Main', type: 'supergroup', isActive: true },
       { id: 2, chatId: '-1002', title: 'Test', type: 'group', isActive: true },
+      { id: 3, chatId: '-1003', title: 'Third', type: 'group', isActive: true },
     ];
 
     const keyboard = buildSendSettingsKeyboard(
@@ -36,8 +37,20 @@ describe('send-menu', () => {
       chats,
     );
 
-    expect(keyboard.inline_keyboard[3][0].text).toBe('☐ Main');
-    expect(keyboard.inline_keyboard[4][0].text).toBe('☑ Test');
+    expect(keyboard.inline_keyboard[1][0].text).toBe('☐ Main');
+    expect(keyboard.inline_keyboard[1][1].text).toBe('☑ Test');
+    expect(keyboard.inline_keyboard[2][0].text).toBe('☐ Third');
+    expect(keyboard.inline_keyboard.flat().map((button) => button.text)).not.toContain('Готово');
+  });
+
+  it('does not render group menu items when group sending is disabled', () => {
+    const chats: TelegramChatEntity[] = [
+      { id: 1, chatId: '-1001', title: 'Main', type: 'supergroup', isActive: true },
+    ];
+
+    const keyboard = buildSendSettingsKeyboard(baseSettings, chats.length, chats);
+
+    expect(keyboard.inline_keyboard.flat().map((button) => button.text)).not.toContain('☐ Main');
   });
 
   it('renders selected group count in settings text', () => {

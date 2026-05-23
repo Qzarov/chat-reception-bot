@@ -8,6 +8,14 @@ export const toggleSelectedGroup = (selectedGroupIds: string[], chatId: string):
     : [...selectedGroupIds, chatId];
 };
 
+const chunk = <T>(items: T[], size: number): T[][] => {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    rows.push(items.slice(index, index + size));
+  }
+  return rows;
+};
+
 export const buildSendSettingsKeyboard = (
   settings: SendSettings,
   knownGroupsCount: number,
@@ -16,43 +24,32 @@ export const buildSendSettingsKeyboard = (
   const inline_keyboard: InlineKeyboardMarkup['inline_keyboard'] = [
     [
       {
-        text: `${settings.includePrivate ? '☑' : '☐'} В личку участникам`,
+        text: `${settings.includePrivate ? '☑' : '☐'} В личку`,
         callback_data: 'send_toggle_private',
       },
-    ],
-    [
       {
         text: `${settings.includeGroups ? '☑' : '☐'} В группы`,
         callback_data: 'send_toggle_groups',
       },
-    ],
-    [
       {
-        text: 'Группы',
-        callback_data: 'send_select_groups',
+        text: `${settings.includeParticipation ? '☑' : '☐'} Участие`,
+        callback_data: 'send_toggle_participation',
       },
     ],
   ];
 
-  if (groups) {
+  if (settings.includeGroups && groups) {
+    const groupButtons = groups.map((group) => ({
+      text: `${settings.selectedGroupIds.includes(group.chatId) ? '☑' : '☐'} ${group.title || group.chatId}`,
+      callback_data: `send_group:${group.chatId}`,
+    }));
+
     inline_keyboard.push(
-      ...groups.map((group) => [
-        {
-          text: `${settings.selectedGroupIds.includes(group.chatId) ? '☑' : '☐'} ${group.title || group.chatId}`,
-          callback_data: `send_group:${group.chatId}`,
-        },
-      ]),
-      [{ text: 'Готово', callback_data: 'send_groups_done' }],
+      ...chunk(groupButtons, 2),
     );
   }
 
   inline_keyboard.push(
-    [
-      {
-        text: `${settings.includeParticipation ? '☑' : '☐'} Добавить кнопки участия`,
-        callback_data: 'send_toggle_participation',
-      },
-    ],
     [
       { text: '✅ Отправить', callback_data: 'confirm_send' },
       { text: '↩️ Заменить', callback_data: 'new_message' },
