@@ -11,6 +11,7 @@ export interface SessionData {
   faculty?: string;
   stayTuned?: string;
   messageToSend?: TelegramMessage;
+  sendSettings?: SendSettings;
 }
 
 export interface MessageFormatEntities {
@@ -37,6 +38,14 @@ export interface TelegramMessage {
   entities?: MessageFormatEntities[];
   fileId?: string;
   caption?: string;
+  caption_entities?: MessageFormatEntities[];
+}
+
+export interface SendSettings {
+  includePrivate: boolean;
+  includeGroups: boolean;
+  includeParticipation: boolean;
+  selectedGroupIds: string[];
 }
 
 export interface UserContext extends Context {

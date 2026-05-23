@@ -12,6 +12,9 @@ import {
 } from './types';
 import { AppConfigService } from '@modules/config';
 import { UserEntity, userRoles, UserService } from '@modules/user';
+import { SendCampaignEntity, SendService, TelegramChatEntity } from '@modules/send';
+import { buildSendSettingsKeyboard, toggleSelectedGroup } from './send-menu';
+import { SendSettings, TelegramMessage } from './types';
 
 @Update()
 @Injectable()
@@ -21,12 +24,20 @@ export class TelegramBotUpdateService {
   constructor(
     @Inject() private readonly _config: AppConfigService,
     private readonly _userService: UserService,
+    private readonly _sendService: SendService,
     @InjectBot() private readonly bot: Telegraf,
   ) {}
 
   @Start()
   async handleStart(@Ctx() ctx: UserContext) {
     this._logger.log('handleStart');
+
+    const startPayload = this._getStartPayload(ctx);
+    if (startPayload?.startsWith('event_')) {
+      const eventId = Number(startPayload.replace('event_', ''));
+      await this._replyEventParticipants(ctx, eventId);
+      return;
+    }
 
     const userTgId = ctx.from.id;
     const isInDb = (await this._userService.findUserByTgId(userTgId)) !== null;
@@ -213,27 +224,12 @@ export class TelegramBotUpdateService {
         text: ctx.message.text,
         entities: ctx.message.entities,
       };
+      ctx.session.sendSettings = this._getDefaultSendSettings();
 
       ctx.session.state = 'confirming_message';
 
-      const recipients = await this._userService.findUsers({ stayTuned: true });
-
-      const keyboard = {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '✅ Yes', callback_data: 'confirm_send' },
-              { text: '↩️ Replace', callback_data: 'new_message' },
-              { text: '❌ Cancel', callback_data: 'cancel' },
-            ],
-          ],
-        },
-      };
-
-      await ctx.reply(
-        `Подтвердите отправку сообщения ${recipients.length} участникам`,
-        keyboard,
-      );
+      await this._replySendSettings(ctx);
+      return;
     }
 
     if ('text' in ctx.message) {
@@ -345,27 +341,26 @@ export class TelegramBotUpdateService {
         caption: ctx.message.caption || '',
         caption_entities: ctx.message.caption_entities,
       };
+      ctx.session.sendSettings = this._getDefaultSendSettings();
       ctx.session.state = 'confirming_message';
 
-      const recipients = await this._userService.findUsers({ stayTuned: true });
-
-      const keyboard = {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '✅ Yes', callback_data: 'confirm_send' },
-              { text: '↩️ Replace', callback_data: 'new_message' },
-              { text: '❌ Cancel', callback_data: 'cancel' },
-            ],
-          ],
-        },
-      };
-
-      await ctx.reply(
-        `Подтвердите отправку сообщения ${recipients.length} участникам`,
-        keyboard,
-      );
+      await this._replySendSettings(ctx);
     }
+  }
+
+  @On('my_chat_member')
+  async handleMyChatMember(@Ctx() ctx) {
+    const update = ctx.update?.my_chat_member;
+    if (!update?.chat || update.chat.type === 'private') return;
+
+    const status = update.new_chat_member?.status;
+    const isActive = !['left', 'kicked'].includes(status);
+    await this._sendService.upsertKnownChat({
+      chatId: String(update.chat.id),
+      title: update.chat.title || update.chat.username || String(update.chat.id),
+      type: update.chat.type,
+      isActive,
+    });
   }
 
   @On('callback_query')
@@ -378,6 +373,70 @@ export class TelegramBotUpdateService {
 
     const splittedData = data.split(':');
     this._logger.log(`splitted callback data: ${splittedData}`);
+
+    if (data === 'send_toggle_private') {
+      ctx.session.sendSettings = {
+        ...this._getSessionSendSettings(ctx),
+        includePrivate: !this._getSessionSendSettings(ctx).includePrivate,
+      };
+      await this._editSendSettings(ctx);
+      return;
+    }
+
+    if (data === 'send_toggle_groups') {
+      const settings = this._getSessionSendSettings(ctx);
+      ctx.session.sendSettings = {
+        ...settings,
+        includeGroups: !settings.includeGroups,
+      };
+      await this._editSendSettings(ctx);
+      return;
+    }
+
+    if (data === 'send_toggle_participation') {
+      const settings = this._getSessionSendSettings(ctx);
+      ctx.session.sendSettings = {
+        ...settings,
+        includeParticipation: !settings.includeParticipation,
+      };
+      await this._editSendSettings(ctx);
+      return;
+    }
+
+    if (data === 'send_select_groups') {
+      await this._editSendSettings(ctx, true);
+      return;
+    }
+
+    if (data.startsWith('send_group:')) {
+      const chatId = data.slice('send_group:'.length);
+      const settings = this._getSessionSendSettings(ctx);
+      ctx.session.sendSettings = {
+        ...settings,
+        includeGroups: true,
+        selectedGroupIds: toggleSelectedGroup(settings.selectedGroupIds, chatId),
+      };
+      await this._editSendSettings(ctx, true);
+      return;
+    }
+
+    if (data === 'send_groups_done') {
+      await this._editSendSettings(ctx);
+      return;
+    }
+
+    if (data.startsWith('event_join:')) {
+      const eventId = Number(data.slice('event_join:'.length));
+      const result = await this._sendService.joinEvent(eventId, {
+        telegramId: String(ctx.from.id),
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+      });
+      await this._refreshEventKeyboards(ctx, eventId, result.count);
+      await ctx.answerCbQuery(result.created ? 'Вы в списке' : 'Ты уже идешь');
+      return;
+    }
 
     /**
      * Previous step
@@ -468,47 +527,12 @@ export class TelegramBotUpdateService {
      * Подтверждение старта рассылки (от админа)
      */
     if (data === 'confirm_send') {
-      const selectedUsers = await this._userService.findUsers({
-        stayTuned: true,
-      });
-
-      if (!selectedUsers.length) {
-        await ctx.reply('No chats selected.');
-        return;
+      const sent = await this._confirmSend(ctx);
+      if (sent) {
+        ctx.session.state = null;
+        ctx.session.messageToSend = null;
+        ctx.session.sendSettings = null;
       }
-
-      const message = ctx.session.messageToSend;
-      let i = 0;
-      for (const user of selectedUsers) {
-        try {
-          if (message.type === 'text') {
-            await ctx.telegram.sendMessage(user.telegramId, message.text, {
-              entities: message.entities,
-              disable_web_page_preview: false,
-            });
-          } else if (message.type === 'photo') {
-            await ctx.telegram.sendPhoto(user.telegramId, message.fileId, {
-              caption: message.caption,
-              caption_entities: message.caption_entities,
-            });
-          }
-
-          i += 1;
-          await ctx.editMessageText(
-            `Sending message: ${i} / ${selectedUsers.length}`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        } catch (error) {
-          console.error(
-            `Error at user ${user.username} (id ${user.telegramId}):`,
-            error,
-          );
-        }
-      }
-
-      await ctx.reply(`Done ✅`);
-      ctx.session.state = null;
-      ctx.session.messageToSend = null;
       return;
     }
 
@@ -517,6 +541,7 @@ export class TelegramBotUpdateService {
      */
     if (data === 'new_message') {
       ctx.session.state = 'awaiting_message';
+      ctx.session.sendSettings = null;
       await ctx.reply('Отправьте новое сообщение:');
       return;
     }
@@ -529,8 +554,183 @@ export class TelegramBotUpdateService {
         `Команда отменена. Для дальнейшей работы отправьте новую команду`,
         { reply_markup: undefined },
       );
+      ctx.session.state = null;
+      ctx.session.messageToSend = null;
+      ctx.session.sendSettings = null;
       return;
     }
+  }
+
+  private async _confirmSend(@Ctx() ctx: UserContext): Promise<boolean> {
+    const message = ctx.session.messageToSend;
+    const settings = this._getSessionSendSettings(ctx);
+    if (!message) {
+      await ctx.reply('Нет сообщения для отправки. Запустите /send заново.');
+      return false;
+    }
+
+    const selectedUsers = settings.includePrivate
+      ? await this._userService.findUsers({ stayTuned: true })
+      : [];
+    const selectedGroupIds = settings.includeGroups ? settings.selectedGroupIds : [];
+    if (!selectedUsers.length && !selectedGroupIds.length) {
+      await ctx.reply('Выберите хотя бы одну цель отправки.');
+      return false;
+    }
+
+    const campaign = await this._sendService.createCampaign({
+      createdByTelegramId: String(ctx.from.id),
+      messageType: message.type,
+      messageText: message.text,
+      messageFileId: message.fileId,
+      messageCaption: message.caption,
+      includeParticipation: settings.includeParticipation,
+    });
+    const participationMarkup = campaign.eventId
+      ? await this._buildParticipationReplyMarkup(campaign.eventId, 0)
+      : undefined;
+
+    let sent = 0;
+    const total = selectedUsers.length + selectedGroupIds.length;
+
+    for (const user of selectedUsers) {
+      try {
+        const sentMessage = await this._sendPreparedMessage(ctx, user.telegramId, message, participationMarkup);
+        await this._storeSentTarget(campaign, 'private', user.telegramId, sentMessage.message_id);
+        sent += 1;
+        await ctx.editMessageText(`Sending message: ${sent} / ${total}`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`Error at user ${user.username} (id ${user.telegramId}):`, error);
+      }
+    }
+
+    for (const chatId of selectedGroupIds) {
+      try {
+        const sentMessage = await this._sendPreparedMessage(ctx, chatId, message, participationMarkup);
+        await this._storeSentTarget(campaign, 'group', chatId, sentMessage.message_id);
+        sent += 1;
+        await ctx.editMessageText(`Sending message: ${sent} / ${total}`);
+      } catch (error) {
+        console.error(`Error at chat ${chatId}:`, error);
+      }
+    }
+
+    await ctx.reply(`Done ✅`);
+    return true;
+  }
+
+  private async _storeSentTarget(
+    campaign: SendCampaignEntity,
+    targetType: 'private' | 'group',
+    chatId: string,
+    messageId: number,
+  ) {
+    await this._sendService.addTarget({
+      campaignId: campaign.id,
+      eventId: campaign.eventId,
+      targetType,
+      chatId: String(chatId),
+      messageId,
+    });
+  }
+
+  private async _sendPreparedMessage(
+    @Ctx() ctx: UserContext,
+    chatId: string,
+    message: TelegramMessage,
+    replyMarkup?: any,
+  ): Promise<any> {
+    if (message.type === 'text') {
+      return ctx.telegram.sendMessage(chatId, message.text, {
+        entities: message.entities as any,
+        reply_markup: replyMarkup,
+      });
+    }
+
+    if (message.type === 'photo') {
+      return ctx.telegram.sendPhoto(chatId, message.fileId, {
+        caption: message.caption,
+        caption_entities: message.caption_entities as any,
+        reply_markup: replyMarkup,
+      });
+    }
+
+    throw new Error(`Unsupported message type: ${message.type}`);
+  }
+
+  private _getDefaultSendSettings(): SendSettings {
+    return {
+      includePrivate: true,
+      includeGroups: false,
+      includeParticipation: false,
+      selectedGroupIds: [],
+    };
+  }
+
+  private _getSessionSendSettings(ctx: UserContext): SendSettings {
+    return ctx.session.sendSettings || this._getDefaultSendSettings();
+  }
+
+  private async _replySendSettings(ctx: UserContext) {
+    const recipients = await this._userService.findUsers({ stayTuned: true });
+    const groups = await this._sendService.listActiveChats();
+    await ctx.reply(
+      `Настройте отправку. Получателей в личку: ${recipients.length}`,
+      { reply_markup: buildSendSettingsKeyboard(this._getSessionSendSettings(ctx), groups.length) },
+    );
+  }
+
+  private async _editSendSettings(ctx: UserContext, showGroups = false) {
+    const groups = await this._sendService.listActiveChats();
+    const settings = this._getSessionSendSettings(ctx);
+    await ctx.editMessageReplyMarkup(
+      buildSendSettingsKeyboard(settings, groups.length, showGroups ? groups : undefined),
+    );
+    await ctx.answerCbQuery();
+  }
+
+  private async _buildParticipationReplyMarkup(eventId: number, count: number) {
+    const botUsername = await this._getBotUsername();
+    return {
+      inline_keyboard: [
+        [{ text: `Я иду · ${count}`, callback_data: `event_join:${eventId}` }],
+        [{ text: 'Кто идет', url: `https://t.me/${botUsername}?start=event_${eventId}` }],
+      ],
+    };
+  }
+
+  private async _refreshEventKeyboards(ctx: UserContext, eventId: number, count: number) {
+    const targets = await this._sendService.getTargetsByEvent(eventId);
+    const replyMarkup = await this._buildParticipationReplyMarkup(eventId, count);
+    for (const target of targets) {
+      try {
+        await ctx.telegram.editMessageReplyMarkup(target.chatId, target.messageId, undefined, replyMarkup);
+      } catch (error) {
+        console.error(`Failed to refresh event ${eventId} keyboard in chat ${target.chatId}:`, error);
+      }
+    }
+  }
+
+  private async _replyEventParticipants(ctx: UserContext, eventId: number) {
+    const labels = await this._sendService.getParticipantLabels(eventId);
+    if (!labels.length) {
+      await ctx.reply('Пока никто не отметил, что идет.');
+      return;
+    }
+    await ctx.reply(`Идут:\n${labels.map((label) => `• ${label}`).join('\n')}`);
+  }
+
+  private async _getBotUsername(): Promise<string> {
+    const botInfo = (this.bot as any).botInfo || await this.bot.telegram.getMe();
+    return botInfo.username;
+  }
+
+  private _getStartPayload(ctx: UserContext): string | undefined {
+    const directPayload = (ctx as any).startPayload;
+    if (directPayload) return directPayload;
+    const text = (ctx.message as any)?.text;
+    return typeof text === 'string' ? text.split(' ')[1] : undefined;
   }
 
   private async _generateInviteLink(
