@@ -5,6 +5,7 @@ import { TelegrafModule } from 'nestjs-telegraf';
 import { session } from 'telegraf';
 import { UserModule } from '@modules/user';
 import { RatingModule } from '@modules/rating';
+import { SendModule } from '@modules/send';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RatingModule } from '@modules/rating';
     }),
     UserModule,
     RatingModule,
+    SendModule,
   ],
   providers: [TelegramBotUpdateService],
   exports: [TelegramBotUpdateService],
