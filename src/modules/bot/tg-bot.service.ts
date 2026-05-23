@@ -15,6 +15,7 @@ import { UserEntity, userRoles, UserService } from '@modules/user';
 import { SendCampaignEntity, SendService, TelegramChatEntity } from '@modules/send';
 import { buildSendSettingsKeyboard, toggleSelectedGroup } from './send-menu';
 import { SendSettings, TelegramMessage } from './types';
+import { buildHelpMessage } from './help-message';
 
 @Update()
 @Injectable()
@@ -108,6 +109,13 @@ export class TelegramBotUpdateService {
       `Id чата: \`${ctx.chat.id}\`\nId пользователя: \`${ctx.from.id}\``,
       { parse_mode: 'MarkdownV2' },
     );
+    return;
+  }
+
+  @Command('help')
+  async handleHelp(@Ctx() ctx: UserContext) {
+    this._logger.log('handleHelp');
+    await ctx.reply(buildHelpMessage(), { parse_mode: 'HTML' });
     return;
   }
 
