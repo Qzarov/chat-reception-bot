@@ -16,6 +16,7 @@ import { SendCampaignEntity, SendService, TelegramChatEntity } from '@modules/se
 import { buildSendSettingsKeyboard, toggleSelectedGroup } from './send-menu';
 import { SendSettings, TelegramMessage } from './types';
 import { buildHelpMessage } from './help-message';
+import { buildParticipationReplyMarkup } from './participation-keyboard';
 
 @Update()
 @Injectable()
@@ -700,12 +701,7 @@ export class TelegramBotUpdateService {
 
   private async _buildParticipationReplyMarkup(eventId: number, count: number) {
     const botUsername = await this._getBotUsername();
-    return {
-      inline_keyboard: [
-        [{ text: `Я иду · ${count}`, callback_data: `event_join:${eventId}` }],
-        [{ text: 'Кто идет', url: `https://t.me/${botUsername}?start=event_${eventId}` }],
-      ],
-    };
+    return buildParticipationReplyMarkup(eventId, count, botUsername);
   }
 
   private async _refreshEventKeyboards(ctx: UserContext, eventId: number, count: number) {
